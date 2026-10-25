@@ -4,6 +4,7 @@
 #include "Devices/Input.h"
 #include "LV_Interface/LVGL.h"
 #include "Notifs/Phone.h"
+#include "Services/Time.h"
 #include "Pins.hpp"
 #include "Util/Events.h"
 #include "Util/Services.h"
@@ -213,6 +214,20 @@ void DevConsole::registerBuiltins(){
 	addCommand("log", "log <tag|*> <0-5>  - set log level", [](const Args& args){
 		if(args.size() < 3) return;
 		esp_log_level_set(args[1].c_str(), (esp_log_level_t) atoi(args[2].c_str()));
+	});
+
+	addCommand("time", "watch local time, UTC and offset", [](const Args&){
+		auto time = (Time*) Services.get(Service::Time);
+		if(!time) return;
+		const tm local = time->getTime();
+		const time_t utc = time->getUTC();
+		printf("local %04d-%02d-%02d %02d:%02d:%02d, utc %lld, offset %+d min (%s)\n", local.tm_year + 1900, local.tm_mon + 1,
+			   local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec, (long long) utc, time->getUtcOffset(),
+			   time->utcOffsetKnown() ? "from phone" : "manual/saved");
+		if(auto phone = (Phone*) Services.get(Service::Phone)){
+			printf("phone local time info: %s, raw 0x%04x\n", phone->getCurrentTime().hasLocalTimeInfo() ? "offered" : "not offered",
+				   phone->getCurrentTime().lastLtiRaw() & 0xffff);
+		}
 	});
 
 	addCommand("bootlog", "bootlog <0-5>  - log level applied from boot (persists)", [](const Args& args){

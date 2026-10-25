@@ -5,6 +5,7 @@
 #include "Notifs/Phone.h"
 #include "Screens/Lock/LockScreen.h"
 #include "Services/StatusCenter.h"
+#include "Services/MelodyPlayer.h"
 
 CallScreen::CallScreen() : evts(6){
 	auto phone = (Phone* ) Services.get(Service::Phone);
@@ -70,6 +71,22 @@ void CallScreen::loop(){
 
 void CallScreen::onStart(){
 	notifTime = millis();
+
+	// Ringtone: the Space Harrier theme from the Japanese Master System BIOS, on loop
+	auto settings = (Settings*) Services.get(Service::Settings);
+	auto status = (StatusCenter*) Services.get(Service::Status);
+	auto melody = (MelodyPlayer*) Services.get(Service::Melody);
+	if(melody && settings->get().notificationSounds && !(status && status->inQuietHours())){
+		size_t n;
+		auto tone = MelodyPlayer::ringtone(n);
+		melody->play(tone, n, true);
+	}
+}
+
+void CallScreen::onStop(){
+	if(auto melody = (MelodyPlayer*) Services.get(Service::Melody)){
+		melody->stop();
+	}
 }
 
 void CallScreen::buildUI(){

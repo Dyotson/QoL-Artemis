@@ -66,6 +66,8 @@ public:
 	void findPhoneStop();
 	bool findPhoneActive();
 
+	const CurrentTime& getCurrentTime() const { return cTime; }
+
 	/** Adds a fake notification, for testing the UI from the dev console. */
 	void debugInject(const std::string& title, const std::string& message);
 

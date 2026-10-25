@@ -25,6 +25,7 @@ private:
 	static constexpr uint32_t NotifInterval = 1000;
 	uint32_t notifTime;
 	void onStart() override;
+	void onStop() override;
 
 	EventQueue evts;
 	bool altPress = false;

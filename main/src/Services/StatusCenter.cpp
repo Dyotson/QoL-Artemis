@@ -82,7 +82,8 @@ void StatusCenter::processPhone(const Phone::Event& evt){
 	if((evt.action == Phone::Event::Added || evt.action == Phone::Event::Changed) && evt.alert){
 		const auto notif = phone->getNotif(evt.data.addChgRem.id);
 		const bool isCall = notif.category == Notif::Category::IncomingCall;
-		if(!isCall && inQuietHours()) return;
+		if(isCall) return; // the call screen plays the ringtone
+		if(inQuietHours()) return;
 
 		if(settings.get().notificationSounds && !audioBlocked){
 			beep();
@@ -135,24 +136,13 @@ void StatusCenter::startAlarm(){
 void StatusCenter::stopAlarm(){
 	if(!alarmActive.exchange(false)) return;
 	esp_timer_stop(alarmTimer);
-	chirp.stop();
 	updateLED();
 }
 
 void StatusCenter::alarmTick(){
 	if(!alarmActive) return;
 
-	// Alarms ring even with notification sounds muted: that's the point of an alarm.
-	chirp.play({
-			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
-			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
-			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
-			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
-			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
-			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
-			Chirp{ .startFreq = 1400, .endFreq = 1400, .duration = 250 }
-	});
-
+	// Sound comes from the MelodyPlayer; this is the visual part
 	if(settings.get().ledEnable){
 		led->blinkTwice({ 255, 255, 255 });
 		for(const auto& singleLed : singleLeds){

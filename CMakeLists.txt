@@ -19,6 +19,8 @@ add_compile_definitions("LV_TICK_CUSTOM_SYS_TIME_EXPR=(esp_timer_get_time() / 10
 # #ifndef-guarded macro project-wide instead.
 add_compile_definitions("BTA_GATTC_NOTIF_REG_MAX=8")
 
+set(PROJECT_VER "QoL-1.0")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The pinned IDF's ELF core dump writer trips -Werror=stringop-truncation with this

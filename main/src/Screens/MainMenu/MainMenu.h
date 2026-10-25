@@ -3,6 +3,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include "LV_Interface/LVScreen.h"
 #include "UIElements/StatusBar.h"
 #include "MenuItem.h"
@@ -32,16 +33,28 @@ private:
 		const char* iconPath = nullptr;
 		const char* iconAltPath = nullptr;
 	};
-	ItemInfo ItemInfos[7] = {
+
+	// Menu entries, in display order. Indices into items[] / ItemInfos[].
+	enum Item : uint8_t {
+		FindPhone, WorldClock, Stopwatch, Timer, Alarms, Lunar, Level, Theremin,
+		Connection, Rover, SysInfo, SettingsItem, ItemCount
+	};
+	ItemInfo ItemInfos[ItemCount] = {
 			{ "Find my phone",    "Ringing phone...",                     File::Menu::Theme1::Find,       File::Menu::Theme1::Find },
+			{ "World clock",      nullptr,                                nullptr,                        nullptr },
+			{ "Stopwatch",        nullptr,                                nullptr,                        nullptr },
+			{ "Timer",            nullptr,                                nullptr,                        nullptr },
+			{ "Alarms",           nullptr,                                nullptr,                        nullptr },
 			{ "Lunar lander",	  nullptr,                  			  File::Menu::Theme1::Lunar, 	  nullptr },
 			{ "Level",            nullptr,                                File::Menu::Theme1::Level,      nullptr },
 			{ "Theremin",         nullptr,                                File::Menu::Theme1::Theremin,   nullptr },
 			{ "Phone connection", ConnDesc[(int) Phone::PhoneType::None], File::Menu::Theme1::Connection, File::Menu::Theme1::Connection },
 			{ "Rover control",	  nullptr,                                File::Menu::Theme1::Rover,   	  nullptr },
+			{ "System info",      nullptr,                                nullptr,                        nullptr },
 			{ "Settings",         nullptr,                                File::Menu::Theme1::Settings,   nullptr }
 	};
-	static constexpr uint8_t ItemCount = sizeof(ItemInfos) / sizeof(ItemInfos[0]);
+	// Paths of the QoL icons (generated per theme into spiffs_image/themeN/menu/)
+	std::string qolIcons[ItemCount];
 	void setupItemPaths(Theme theme);
 
 	void setConnAlts();

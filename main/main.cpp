@@ -44,6 +44,8 @@
 #include "Services/DevConsole.h"
 #include "BLE/ConMan.h"
 #include "Settings/ExtSettings.h"
+#include "Services/MelodyPlayer.h"
+#include "Services/Clocks.h"
 
 LVGL* lvgl;
 BacklightBrightness* bl;
@@ -140,6 +142,7 @@ void init(){
 	auto buzzPwm = new PWM(Pins::get(Pin::Buzz), LEDC_CHANNEL_0);
 	auto audio = new ChirpSystem(*buzzPwm);
 	Services.set(Service::Audio, audio);
+	Services.set(Service::Melody, new MelodyPlayer(*audio));
 
 	auto i2c = new I2C(I2C_NUM_0, (gpio_num_t) Pins::get(Pin::I2cSda), (gpio_num_t) Pins::get(Pin::I2cScl));
 	auto imu = new IMU(*i2c);
@@ -198,6 +201,8 @@ void init(){
 	srand(esp_random());
 
 	new DevConsole(*lvgl);
+
+	Services.set(Service::Clocks, new Clocks());
 
 	FSLVGL::loadCache(settings->get().themeData.theme);
 

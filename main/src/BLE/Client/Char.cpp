@@ -3,13 +3,17 @@
 
 static const char* TAG = "BLE::Client::Char";
 
-BLE::Client::Char::Char(esp_bt_uuid_t uuid, esp_gatt_char_prop_t props) : uuid(uuid), props(props), notifQueue((props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) ? 12 : 1){
+BLE::Client::Char::Char(esp_bt_uuid_t uuid, esp_gatt_char_prop_t props) : uuid(uuid), props(props),
+	notifQueue((props & (ESP_GATT_CHAR_PROP_BIT_NOTIFY | ESP_GATT_CHAR_PROP_BIT_READ)) ? 12 : 1){
 
 }
 
 std::unique_ptr<BLE::Client::Char::Notif> BLE::Client::Char::getNextNotif(TickType_t wait){
-	if(!(props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) || !(remoteProps & ESP_GATT_CHAR_PROP_BIT_NOTIFY)){
-		ESP_LOGW(TAG, "Requesting notify, but NOTIFY property bit isn't");
+	// Read results are delivered through the same queue, so read-only chars qualify too
+	const bool notify = (props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) && (remoteProps & ESP_GATT_CHAR_PROP_BIT_NOTIFY);
+	const bool read = (props & ESP_GATT_CHAR_PROP_BIT_READ) && (remoteProps & ESP_GATT_CHAR_PROP_BIT_READ);
+	if(!notify && !read){
+		ESP_LOGW(TAG, "Requesting notify/read results, but NOTIFY/READ property bit isn't");
 		return nullptr;
 	}
 
@@ -39,6 +43,7 @@ void BLE::Client::Char::establish(std::unique_ptr<CharInfo> info, esp_gatt_char_
 			chr->regForNotify();
 		}else{
 			ESP_LOGW(TAG, "Have NOTIFY bit set, but remote characteristic doesn't");
+			configDone(Config::Notify); // still usable for reads
 		}
 	}else{
 		configDone(Config::Notify);
