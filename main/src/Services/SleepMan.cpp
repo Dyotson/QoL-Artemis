@@ -63,6 +63,8 @@ void SleepMan::goSleep(){
 		}
 	}
 
+	imu.enableGyro(false); // only the games use it
+
 	inSleep = true;
 
 	bool buttonWakeWhileLowered = false;
@@ -83,6 +85,7 @@ void SleepMan::goSleep(){
 		lv_timer_handler();
 	});
 	nsBlocked = inSleep = false;
+	imu.enableGyro(true);
 
 	if(settings.get().motionDetection){
 		imu.init();

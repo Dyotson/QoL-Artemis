@@ -64,6 +64,12 @@ public:
 
 	Sample getSample();
 
+	/** Chip temperature [°C]. Reads close to skin temperature on the wrist, ambient when off-wrist for a while. */
+	float getTemperature();
+
+	/** Gyroscope on/off (it's only needed by the games; off saves ~0.5 mA while the screen is off) */
+	void enableGyro(bool enable);
+
 	void clearSources();
 
 	void shutdown();

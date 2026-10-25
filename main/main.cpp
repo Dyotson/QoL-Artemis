@@ -46,6 +46,7 @@
 #include "Settings/ExtSettings.h"
 #include "Services/MelodyPlayer.h"
 #include "Services/Clocks.h"
+#include "Services/Weather.h"
 
 LVGL* lvgl;
 BacklightBrightness* bl;
@@ -181,6 +182,8 @@ void init(){
 	auto time = new Time(*rtc);
 	Services.set(Service::Time, time); // Time service is required as soon as Phone is up
 
+	Services.set(Service::Weather, new Weather());
+
 	auto bt = new Bluetooth();
 	auto gap = new BLE::GAP();
 	auto client = new BLE::Client(gap);
@@ -189,6 +192,22 @@ void init(){
 	server->start();
 	Services.set(Service::Phone, phone);
 	client->setRecoveryAllowed([phone](){ return phone->getPhoneType() != Phone::PhoneType::Android; });
+
+	DevConsole::addCommand("theme", "theme <1-9>  - preview a theme on the lock screen (not saved)", [](const DevConsole::Args& args){
+		if(args.size() < 2) return;
+		const int t = atoi(args[1].c_str());
+		if(t < 1 || t > 9) return;
+		lvgl->runOnUI([t](){
+			auto settings = (Settings*) Services.get(Service::Settings);
+			auto s = settings->get();
+			s.themeData = createTheme((Theme) (t - 1));
+			settings->set(s);
+			FSLVGL::unloadCache();
+			FSLVGL::loadCache(s.themeData.theme);
+			lvgl->startScreen([](){ return std::make_unique<LockScreen>(); });
+		});
+		vTaskDelay(pdMS_TO_TICKS(1500));
+	});
 
 	DevConsole::addCommand("phone", "phone link / notification service state", [phone, client](const DevConsole::Args&){
 		const auto st = client->getStatus();

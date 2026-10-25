@@ -123,7 +123,11 @@ private:
 	static constexpr uint64_t AlertCooldownMs = 4000;
 	uint64_t lastAlertMs = 0;
 	bool takeAlert();
-	uint32_t debugUid = 0xF0000000;
+	static constexpr uint32_t debugUid0 = 0xF0000000;
+	uint32_t debugUid = debugUid0;
+
+	/** Weather updates from the iPhone Shortcut arrive as notifications; take them out */
+	bool consumeWeather(const Notif& notif);
 };
 
 

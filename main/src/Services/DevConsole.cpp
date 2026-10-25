@@ -230,6 +230,17 @@ void DevConsole::registerBuiltins(){
 		}
 	});
 
+	addCommand("wx", "wx <text>  - feed a weather update, e.g. wx ARTEMIS-WX|18 C|Partly Cloudy|24 C|12 C", [](const Args& args){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(!phone || args.size() < 2) return;
+		std::string text;
+		for(size_t i = 1; i < args.size(); i++){
+			if(!text.empty()) text += ' ';
+			text += args[i];
+		}
+		phone->debugInject("Shortcuts", text);
+	});
+
 	addCommand("bootlog", "bootlog <0-5>  - log level applied from boot (persists)", [](const Args& args){
 		auto diag = (Diagnostics*) Services.get(Service::Diag);
 		if(!diag || args.size() < 2) return;

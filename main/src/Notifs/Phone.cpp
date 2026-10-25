@@ -1,6 +1,8 @@
 #include "Phone.h"
 #include "Util/Events.h"
 #include "Util/stdafx.h"
+#include "Util/Services.h"
+#include "Services/Weather.h"
 #include <functional>
 #include <esp_log.h>
 
@@ -260,8 +262,23 @@ void Phone::onMediaState(MediaState state){
 	Events::post(Facility::Phone, Event { .action = Event::MediaState, .data = { .mediaState = getMediaState() } });
 }
 
+bool Phone::consumeWeather(const Notif& notif){
+	if(!Weather::isWeatherText(notif.title, notif.message)) return false;
+
+	if(auto weather = (Weather*) Services.get(Service::Weather)){
+		weather->ingest(notif.title, notif.message);
+	}
+
+	// It was only a carrier for the data: clear it from the iPhone's notification center
+	if(current != nullptr && notif.uid < debugUid0){
+		current->actionNeg(notif.uid);
+	}
+	return true;
+}
+
 void Phone::onAdd(Notif notif){
 	if(notif.title.empty() && notif.message.empty()) return;
+	if(consumeWeather(notif)) return;
 
 	std::lock_guard lock(mut);
 
@@ -302,6 +319,7 @@ void Phone::onAdd(Notif notif){
 }
 
 void Phone::onModify(Notif notif){
+	if(consumeWeather(notif)) return;
 	std::lock_guard lock(mut);
 
 	auto saved = findNotif(notif.uid);

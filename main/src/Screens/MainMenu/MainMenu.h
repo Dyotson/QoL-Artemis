@@ -36,11 +36,12 @@ private:
 
 	// Menu entries, in display order. Indices into items[] / ItemInfos[].
 	enum Item : uint8_t {
-		FindPhone, WorldClock, Stopwatch, Timer, Alarms, Lunar, Level, Theremin,
+		FindPhone, WeatherItem, WorldClock, Stopwatch, Timer, Alarms, Lunar, Level, Theremin,
 		Connection, Rover, SysInfo, SettingsItem, ItemCount
 	};
 	ItemInfo ItemInfos[ItemCount] = {
 			{ "Find my phone",    "Ringing phone...",                     File::Menu::Theme1::Find,       File::Menu::Theme1::Find },
+			{ "Weather",          nullptr,                                nullptr,                        nullptr },
 			{ "World clock",      nullptr,                                nullptr,                        nullptr },
 			{ "Stopwatch",        nullptr,                                nullptr,                        nullptr },
 			{ "Timer",            nullptr,                                nullptr,                        nullptr },

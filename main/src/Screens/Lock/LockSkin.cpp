@@ -13,6 +13,7 @@
 #include "Screens/Lock/Elements/Theme8BatteryElement.h"
 #include "UIElements/NotifIconsElement.h"
 #include "Theme/theme.h"
+#include "UIElements/WeatherElement.h"
 
 LockSkin::LockSkin(lv_obj_t* parent, lv_group_t* inputGroup) : LVObject(parent), inputGroup(inputGroup){
 	notifs.reserve(MaxNotifs);
@@ -43,6 +44,10 @@ void LockSkin::loop(){
 
 	if(media != nullptr){
 		media->loop();
+	}
+
+	if(weather != nullptr){
+		weather->loop();
 	}
 
 	setDateLabel();
@@ -324,6 +329,12 @@ void LockSkin::buildUI(){
 	lv_obj_set_y(date, themeData.dateY);
 	lv_obj_set_style_text_color(date, themeData.dateColor, 0);
 	setDateLabel();
+
+	// Theme 4 puts it inside a dark panel, where its (dark) date colour wouldn't show
+	weather = new WeatherElement(main, themeData.theme == Theme::Theme4 ? themeData.backgroundColor : themeData.dateColor);
+	lv_obj_set_align(*weather, LV_ALIGN_TOP_LEFT);
+	lv_obj_set_pos(*weather, themeData.weatherX, themeData.weatherY);
+	lv_obj_move_foreground(*weather);
 
 	locker = new Slider(main, themeData.sliderConfig);
 	lv_obj_set_y(*locker, themeData.sliderY);

@@ -39,6 +39,8 @@ struct ThemeStruct {
 	bool verticalClock = false;
 	int16_t clockPadding = 0;
 	bool specialPhone = false;
+	lv_coord_t weatherX = 0;	// position of the weather readout on the face (top-left)
+	lv_coord_t weatherY = 0;
 
 	struct {
 		lv_coord_t x = 0;
@@ -80,6 +82,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateY = 14;
 			data.notifData.maxNotifs = 10;
 
+			data.weatherX = 50;
+			data.weatherY = 114;
+
 			break;
 		}
 		case Theme::Theme2:{
@@ -103,6 +108,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateY = 2;
 			data.notifData.maxNotifs = 6;
 
+			data.weatherX = 52;
+			data.weatherY = 93;
+
 			break;
 		}
 		case Theme::Theme3:{
@@ -124,6 +132,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.notifData.y = 14;
 			data.dateY = -40;
 			data.notifData.maxNotifs = 9;
+
+			data.weatherX = 6;
+			data.weatherY = 72;
 
 			break;
 		}
@@ -162,6 +173,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateX = -22;
 			data.notifData.maxNotifs = 14;
 
+			data.weatherX = 88;
+			data.weatherY = 86;
+
 			break;
 		}
 		case Theme::Theme5:{
@@ -198,6 +212,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateX = -28;
 			data.notifData.maxNotifs = 5;
 
+			data.weatherX = 14;
+			data.weatherY = 2;
+
 			break;
 		}
 		case Theme::Theme6:{
@@ -229,6 +246,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateY = -46;
 			data.notifData.maxNotifs = 10;
 
+			data.weatherX = 40;
+			data.weatherY = 2;
+
 			break;
 		}
 		case Theme::Theme7:{
@@ -253,6 +273,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.notifData.h = 15;
 			data.dateY = 10;
 			data.notifData.maxNotifs = 7;
+
+			data.weatherX = 96;
+			data.weatherY = 88;
 
 			break;
 		}
@@ -279,6 +302,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.dateX = 18;
 			data.notifData.maxNotifs = 7;
 
+			data.weatherX = 58;
+			data.weatherY = 2;
+
 			break;
 		}
 		case Theme::Theme9:{
@@ -301,6 +327,9 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.specialPhone = true;
 			data.dateY = 4;
 			data.notifData.maxNotifs = 8;
+
+			data.weatherX = 50;
+			data.weatherY = 1;
 
 			break;
 		}

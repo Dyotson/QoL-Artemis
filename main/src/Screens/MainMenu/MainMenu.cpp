@@ -10,6 +10,7 @@
 #include "LV_Interface/InputLVGL.h"
 #include "Screens/Lander/LunarLander.h"
 #include "Services/StatusCenter.h"
+#include "Screens/Apps/WeatherScreen.h"
 #include "Screens/Apps/WorldClockScreen.h"
 #include "Screens/Apps/StopwatchScreen.h"
 #include "Screens/Apps/TimerScreen.h"
@@ -146,6 +147,7 @@ void MainMenu::setupItemPaths(Theme theme){
 		qolIcons[item] = std::string("S:/theme") + std::to_string((int) theme + 1) + "/menu/" + name + ".bin";
 		ItemInfos[item].iconPath = qolIcons[item].c_str();
 	};
+	qol(WeatherItem, "weather");
 	qol(WorldClock, "worldclock");
 	qol(Stopwatch, "stopwatch");
 	qol(Timer, "timer");
@@ -221,6 +223,7 @@ void MainMenu::onClick(){
 
 	std::function<void()> launcher[ItemCount] = {
 			[](){ },
+			[this](){ transition([](){ return std::make_unique<WeatherScreen>(); }); },
 			[this](){ transition([](){ return std::make_unique<WorldClockScreen>(); }); },
 			[this](){ transition([](){ return std::make_unique<StopwatchScreen>(); }); },
 			[this](){ transition([](){ return std::make_unique<TimerScreen>(); }); },

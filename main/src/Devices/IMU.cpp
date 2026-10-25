@@ -1,4 +1,5 @@
 #include "IMU.h"
+#include <cmath>
 #include <Util/Events.h>
 #include <driver/gpio.h>
 #include <esp_log.h>
@@ -393,4 +394,14 @@ void IMU::shutdown(){
 
 	lsm6ds3tr_c_xl_data_rate_set(&ctx, LSM6DS3TR_C_XL_ODR_OFF);
 	lsm6ds3tr_c_gy_data_rate_set(&ctx, LSM6DS3TR_C_GY_ODR_OFF);
+}
+
+float IMU::getTemperature(){
+	int16_t raw = 0;
+	if(lsm6ds3tr_c_temperature_raw_get(&ctx, &raw) != 0) return NAN;
+	return lsm6ds3tr_c_from_lsb_to_celsius(raw);
+}
+
+void IMU::enableGyro(bool enable){
+	lsm6ds3tr_c_gy_data_rate_set(&ctx, enable ? LSM6DS3TR_C_GY_ODR_104Hz : LSM6DS3TR_C_GY_ODR_OFF);
 }
