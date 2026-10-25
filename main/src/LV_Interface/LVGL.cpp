@@ -45,6 +45,8 @@ void LVGL::loop(){
 
 	// TODO this rly should have a lock on it, but unfortunately the system is made this way:
 	// TODO screens start other screens in their own loop which would lock the thread forever, should ideally be some kind of a queue that automatically starts new after looping current
+	processUIQueue();
+
 	if(currentScreen){
 		currentScreen->loop();
 	}
@@ -81,4 +83,25 @@ lv_disp_t* LVGL::disp() const{
 
 void LVGL::rotateScreen(bool rotation){
 	display.setRotation(rotation);
+}
+
+void LVGL::runOnUI(std::function<void()> fn){
+	std::lock_guard lock(uiMut);
+	uiQueue.push_back(std::move(fn));
+}
+
+void LVGL::processUIQueue(){
+	std::vector<std::function<void()>> queued;
+	{
+		std::lock_guard lock(uiMut);
+		queued.swap(uiQueue);
+	}
+
+	for(auto& fn : queued){
+		fn();
+	}
+}
+
+LVScreen* LVGL::getCurrentScreen() const{
+	return currentScreen.get();
 }

@@ -50,6 +50,11 @@ private:
 	adc_cali_handle_t caliRef;
 	float lastCalibrationOffset = 0;
 
+	// The Critical level has to persist this long before the watch powers itself off,
+	// so a momentary voltage dip or bad ADC read doesn't shut it down.
+	static constexpr uint64_t CriticalConfirmMs = 20000;
+	uint64_t criticalSince = 0;
+
 	void calibrate();
 
 	virtual void sample(bool fresh) override;

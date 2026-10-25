@@ -2,6 +2,8 @@
 #include "Util/Services.h"
 #include "SleepMan.h"
 #include "Pins.hpp"
+#include "Services/Time.h"
+#include "Settings/ExtSettings.h"
 
 StatusCenter::StatusCenter() : Threaded("Status", 2048), events(12),
 chirp(*((ChirpSystem*) Services.get(Service::Audio))),
@@ -30,6 +32,20 @@ settings(*((Settings*) Services.get(Service::Settings)))
 	}
 
 	updateLED();
+
+	esp_timer_create_args_t args = {
+			.callback = [](void* arg){ static_cast<StatusCenter*>(arg)->onPhoneLost(); },
+			.arg = this,
+			.dispatch_method = ESP_TIMER_TASK,
+			.name = "PhoneLost",
+			.skip_unhandled_events = true
+	};
+	esp_timer_create(&args, &lostTimer);
+
+	args.callback = [](void* arg){ static_cast<StatusCenter*>(arg)->alarmTick(); };
+	args.name = "AlarmTick";
+	esp_timer_create(&args, &alarmTimer);
+
 	start();
 }
 
@@ -54,15 +70,93 @@ void StatusCenter::loop(){
 
 void StatusCenter::processPhone(const Phone::Event& evt){
 	auto phone = (Phone*) Services.get(Service::Phone);
-	hasNotifs = !phone->getNotifs().empty();
+	hasNotifs = phone->getNotifsCount() != 0;
 
-	if((evt.action == Phone::Event::Added || evt.action == Phone::Event::Changed)){
+	if(evt.action == Phone::Event::Connected){
+		esp_timer_stop(lostTimer);
+	}else if(evt.action == Phone::Event::Disconnected){
+		esp_timer_stop(lostTimer);
+		esp_timer_start_once(lostTimer, LostAlertMs * 1000);
+	}
+
+	if((evt.action == Phone::Event::Added || evt.action == Phone::Event::Changed) && evt.alert){
+		const auto notif = phone->getNotif(evt.data.addChgRem.id);
+		const bool isCall = notif.category == Notif::Category::IncomingCall;
+		if(!isCall && inQuietHours()) return;
+
 		if(settings.get().notificationSounds && !audioBlocked){
 			beep();
 		}
 
 		if(settings.get().ledEnable){
 			circularBlink();
+		}
+	}
+}
+
+bool StatusCenter::inQuietHours(){
+	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+	auto time = (Time*) Services.get(Service::Time);
+	if(!ext || !time) return false;
+
+	const auto cfg = ext->get();
+	if(!cfg.quietHours || cfg.quietStart == cfg.quietEnd) return false;
+
+	const int hour = time->getTime().tm_hour;
+	if(cfg.quietStart < cfg.quietEnd){
+		return hour >= cfg.quietStart && hour < cfg.quietEnd;
+	}
+	return hour >= cfg.quietStart || hour < cfg.quietEnd; // wraps past midnight
+}
+
+void StatusCenter::onPhoneLost(){
+	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+	auto phone = (Phone*) Services.get(Service::Phone);
+	if(!ext || !phone || !ext->get().disconnectAlert || phone->isConnected() || inQuietHours()) return;
+
+	if(settings.get().notificationSounds){
+		chirp.play({
+				Chirp{ .startFreq = 900, .endFreq = 500, .duration = 250 },
+				Chirp{ .startFreq = 0, .endFreq = 0, .duration = 120 },
+				Chirp{ .startFreq = 900, .endFreq = 500, .duration = 250 }
+		});
+	}
+	if(settings.get().ledEnable){
+		led->blinkTwice({ 255, 0, 0 });
+	}
+}
+
+void StatusCenter::startAlarm(){
+	if(alarmActive.exchange(true)) return;
+	alarmTick();
+	esp_timer_start_periodic(alarmTimer, 1500 * 1000);
+}
+
+void StatusCenter::stopAlarm(){
+	if(!alarmActive.exchange(false)) return;
+	esp_timer_stop(alarmTimer);
+	chirp.stop();
+	updateLED();
+}
+
+void StatusCenter::alarmTick(){
+	if(!alarmActive) return;
+
+	// Alarms ring even with notification sounds muted: that's the point of an alarm.
+	chirp.play({
+			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
+			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
+			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
+			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
+			Chirp{ .startFreq = 1000, .endFreq = 1000, .duration = 120 },
+			Chirp{ .startFreq = 0, .endFreq = 0, .duration = 80 },
+			Chirp{ .startFreq = 1400, .endFreq = 1400, .duration = 250 }
+	});
+
+	if(settings.get().ledEnable){
+		led->blinkTwice({ 255, 255, 255 });
+		for(const auto& singleLed : singleLeds){
+			singleLed->blinkTwice(0xFF);
 		}
 	}
 }
@@ -77,11 +171,12 @@ void StatusCenter::processBatt(const Battery::Event& evt){
 	}else{
 		auto level = evt.level;
 
-		if(level == Battery::Critical){
+		auto battery = (Battery*) Services.get(Service::Battery);
+		if(level == Battery::Critical && battery && battery->isShutdown()){
 			shutdown();
 			stop(0);
 			return;
-		}else if(level == Battery::VeryLow){
+		}else if(level == Battery::VeryLow || level == Battery::Critical){
 			battState = Empty;
 		}else{
 			battState = Ok;

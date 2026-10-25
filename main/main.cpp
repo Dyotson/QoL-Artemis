@@ -40,6 +40,9 @@
 #include "Screens/Lander/LunarLander.h"
 #include "Screens/PerseCtrl/WiFiSTA.h"
 #include "Screens/PerseCtrl/TCPClient.h"
+#include "Services/Diagnostics.h"
+#include "Services/DevConsole.h"
+#include "Settings/ExtSettings.h"
 
 LVGL* lvgl;
 BacklightBrightness* bl;
@@ -92,8 +95,14 @@ void init(){
 	}
 	ESP_ERROR_CHECK(ret);
 
+	auto diag = new Diagnostics();
+	Services.set(Service::Diag, diag);
+
 	auto settings = new Settings();
 	Services.set(Service::Settings, settings);
+
+	auto extSettings = new ExtSettings();
+	Services.set(Service::ExtSettings, extSettings);
 
 	if(JigHWTest::checkJig()){
 		printf("Jig\n");
@@ -140,6 +149,7 @@ void init(){
 	Services.set(Service::Input, input);
 
 	lvgl = new LVGL(*disp);
+	Services.set(Service::LVGL, lvgl);
 	auto theme = theme_init(lvgl->disp());
 	lv_disp_set_theme(lvgl->disp(), theme);
 
@@ -176,6 +186,8 @@ void init(){
 	Services.set(Service::Phone, phone);
 
 	srand(esp_random());
+
+	new DevConsole(*lvgl);
 
 	FSLVGL::loadCache(settings->get().themeData.theme);
 

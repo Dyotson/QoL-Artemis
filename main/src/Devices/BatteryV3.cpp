@@ -4,6 +4,7 @@
 #include <soc/efuse_reg.h>
 #include <Util/stdafx.h>
 #include <cmath>
+#include <esp_log.h>
 #include <driver/gpio.h>
 #include "Services/SleepMan.h"
 #include <Util/Services.h>
@@ -77,8 +78,20 @@ void BatteryV3::sample(bool fresh){
 		Events::post(Facility::Battery, Battery::Event{ .action = Event::LevelChange, .level = getLevel() });
 	}
 
-	if(getLevel() == Critical){
+	if(getLevel() != Critical){
+		criticalSince = 0;
+		return;
+	}
+
+	if(criticalSince == 0){
+		criticalSince = millis();
+		ESP_LOGW(TAG, "Battery critical (%d%%), confirming before shutdown", getPerc());
+		return;
+	}
+
+	if(millis() - criticalSince >= CriticalConfirmMs){
 		setShutdown(true);
+		Events::post(Facility::Battery, Battery::Event{ .action = Event::LevelChange, .level = Critical });
 		extern void shutdown();
 		shutdown();
 	}

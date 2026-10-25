@@ -27,6 +27,14 @@ namespace ANCS {
 		//Reserved EventID values = 3–255
 	};
 
+	enum EventFlags {
+		EventFlagSilent = (1 << 0),
+		EventFlagImportant = (1 << 1),
+		EventFlagPreExisting = (1 << 2),
+		EventFlagPositiveAction = (1 << 3),
+		EventFlagNegativeAction = (1 << 4),
+	};
+
 	enum AttributeID {
 		AppIdentifier = 0,
 		Title = 1, // (Needs to be followed by a 2-bytes max length parameter)

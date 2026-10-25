@@ -272,7 +272,7 @@ void SettingsScreen::buildUI(){
 		if(value){
 			status->blink();
 		}
-	}, startingSettings.notificationSounds);
+	}, startingSettings.ledEnable);
 	lv_group_add_obj(inputGroup, *ledSwitch);
 
 	sleepSlider = new DiscreteSliderElement(container, "Sleep time", [this](uint8_t value){
@@ -287,12 +287,12 @@ void SettingsScreen::buildUI(){
 		auto s = settings.get();
 		s.motionDetection = value;
 		settings.set(s);
-	}, startingSettings.notificationSounds);
+	}, startingSettings.motionDetection);
 	lv_group_add_obj(inputGroup, *motionSwitch);
 
 	rotationSwitch = new BoolElement(container, "Left-hand mode", [this](bool value){
 		auto s = settings.get();
-		s.motionDetection = value;
+		s.screenRotate = value;
 		settings.set(s);
 		lvgl->rotateScreen(value);
 		lv_obj_invalidate(*this);

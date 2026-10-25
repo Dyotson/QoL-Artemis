@@ -11,6 +11,7 @@ void ConConf::conf(const esp_ble_conn_update_params_t& params){
 		return;
 	}
 
+	retries = 0;
 	send(params);
 }
 
@@ -18,15 +19,19 @@ void ConConf::confDone(bool success){
 	std::lock_guard lockConf(confMut);
 
 	if(hasPending()){
+		retries = 0;
 		send(pending);
 		pending = {};
 		return;
 	}
 
-	if(!success && hasCurrent()){
+	if(!success && hasCurrent() && retries < MaxRetries){
+		retries++;
 		send(current);
 		return;
 	}
+
+	retries = 0;
 
 	current = {};
 
@@ -56,6 +61,7 @@ void ConConf::send(esp_ble_conn_update_params_t params){
 void ConConf::reset(){
 	std::lock_guard lockConf(confMut);
 	current = pending = {};
+	retries = 0;
 
 	std::lock_guard lockWait(waitMut);
 	for(const auto& sem : waitSems){

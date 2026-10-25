@@ -23,6 +23,10 @@ public:
 	void imuSignal();
 	void shutdown();
 
+	/** Asks the UI thread to turn the screen off on its next loop. Safe from any task. */
+	void requestSleep();
+	bool isSleeping() const;
+
 private:
 
 	Sleep sleep;
@@ -53,6 +57,7 @@ private:
 	uint32_t altPress;
 
 	volatile bool nsBlocked = false;
+	volatile bool sleepRequested = false;
 
 	//if sleep is caused by btn press, register for Lowered event instead of Lifted, then clear this flag when Lowered occurs
 	bool waitForLower = false;

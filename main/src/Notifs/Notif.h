@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ctime>
+#include <cstdint>
 
 struct Notif {
 	uint32_t uid;
@@ -34,6 +35,15 @@ struct Notif {
 		Entertainment,
 		OutgoingCall
 	} category;
+
+	// Source hints. Silent: the phone didn't alert for it either. PreExisting: it was
+	// already on the phone when the watch (re)connected, i.e. not a fresh arrival.
+	bool silent = false;
+	bool preExisting = false;
+
+	// Phone-local time the notification was posted. hour == -1 when unknown.
+	int8_t hour = -1;
+	int8_t minute = -1;
 };
 
 enum class NotifIcon : uint8_t {

@@ -3,12 +3,14 @@
 
 
 #include "Util/Threaded.h"
+#include <atomic>
 #include "Util/Events.h"
 #include "Notifs/Phone.h"
 #include "Devices/Battery.h"
 #include "ChirpSystem.h"
 #include "Settings/Settings.h"
 #include "Devices/LEDController.h"
+#include <esp_timer.h>
 
 class StatusCenter : public Threaded {
 public:
@@ -29,6 +31,13 @@ public:
 	void blinkAll();
 	void blinkAllTwice();
 
+	/** Repeating attention pattern for alarms/timers. Stops on stopAlarm(). */
+	void startAlarm();
+	void stopAlarm();
+
+	/** Whether notification alerts are currently muted by quiet hours */
+	bool inQuietHours();
+
 private:
 	EventQueue events;
 
@@ -46,6 +55,15 @@ private:
 
 	void processPhone(const Phone::Event& evt);
 	void processBatt(const Battery::Event& evt);
+
+	// "Phone lost" alert: fires if the phone stays disconnected for LostAlertMs
+	static constexpr uint64_t LostAlertMs = 60 * 1000;
+	esp_timer_handle_t lostTimer = nullptr;
+	void onPhoneLost();
+
+	esp_timer_handle_t alarmTimer = nullptr;
+	std::atomic<bool> alarmActive{ false };
+	void alarmTick();
 
 };
 

@@ -85,10 +85,11 @@ void ANCS::Client::loopNotif(){
 		ESP_LOGW(TAG, "INDICATE: Notify on notification_source channel. ID: %d, flags: %d, category: %d", data[0], data[1], data[2]);
 	}
 
+	if(data.size() < 8) return;
+
 	EventID evt = (EventID) data[0];
-	uint8_t flags = data[1]; // TODO: check if notif has positive/negative action
+	uint8_t flags = data[1];
 	CategoryID cat = (CategoryID) data[2];
-	uint8_t catCount = data[3];
 	uint32_t uid;
 	memcpy(&uid, &data[4], 4);
 
@@ -104,6 +105,7 @@ void ANCS::Client::loopNotif(){
 			for(auto& q : needData){
 				if(q.uid == uid){
 					q.modify = q.modify || modify;
+					q.flags = flags;
 					break;
 				}
 			}
@@ -124,7 +126,7 @@ void ANCS::Client::loopNotif(){
 			}
 		}
 
-		needData.push_back(QueuedNotif{ .uid = uid, .category = cat, .modify = modify });
+		needData.push_back(QueuedNotif{ .uid = uid, .category = cat, .modify = modify, .flags = flags });
 		queuedUids.insert(uid);
 		pumpRequest(); // issue now if the pipeline is idle (no added latency)
 	}else if(evt == NotificationRemoved){
@@ -259,7 +261,7 @@ bool ANCS::Client::requestData(uint32_t uid){
 			//AttributeID::Subtitle,
 			AttributeID::Message,
 			//AttributeID::MessageSize,
-			//AttributeID::Date,
+			AttributeID::Date,
 			//AttributeID::PositiveActionLabel,
 			//AttributeID::NegativeActionLabel,
 	};
@@ -324,6 +326,19 @@ void ANCS::Client::processData(bool sendIncomplete){
 
 		if(AppIDMap.count(notif.appID)){
 			notif.appID = AppIDMap.at(notif.appID);
+		}
+
+		notif.silent = nd.flags & EventFlagSilent;
+		notif.preExisting = nd.flags & EventFlagPreExisting;
+
+		// Date format is "yyyyMMdd'T'HHmmSS"
+		const auto date = get(Date);
+		if(date.size() >= 13 && date[8] == 'T'){
+			notif.hour = (int8_t) ((date[9] - '0') * 10 + (date[10] - '0'));
+			notif.minute = (int8_t) ((date[11] - '0') * 10 + (date[12] - '0'));
+			if(notif.hour < 0 || notif.hour > 23 || notif.minute < 0 || notif.minute > 59){
+				notif.hour = notif.minute = -1;
+			}
 		}
 
 		ESP_LOGI(TAG, "Sending notif 0x%lx. Modify: %d\n", nd.uid, nd.modify);

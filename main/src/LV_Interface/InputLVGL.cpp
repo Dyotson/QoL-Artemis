@@ -8,7 +8,7 @@ const std::map<Input::Button, lv_key_t> InputLVGL::keyMap = {{ Input::Button::Up
 															 { Input::Button::Down,   LV_KEY_RIGHT },
 															 { Input::Button::Select, LV_KEY_ENTER }};
 
-InputLVGL::InputLVGL() : Threaded("InputLVGL", 1024), queue(QueueSize){
+InputLVGL::InputLVGL() : Threaded("InputLVGL", 2048), queue(QueueSize){
 	instance = this;
 
 	Events::listen(Facility::Input, &queue);

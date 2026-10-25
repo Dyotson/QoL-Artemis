@@ -10,6 +10,9 @@
 #include <deque>
 #include <cstdint>
 #include <optional>
+#include <mutex>
+#include <unordered_set>
+#include <esp_timer.h>
 
 class Phone {
 public:
@@ -26,6 +29,10 @@ public:
 			PhoneType phoneType;
 			::MediaState mediaState;
 		} data;
+
+		// Added/Changed: whether the user should be alerted (beep/LEDs) for this event.
+		// False for silent, pre-existing (re-sent on reconnect) and rate-limited updates.
+		bool alert = false;
 	};
 
 	static constexpr size_t MaxNotifs = 20;
@@ -59,6 +66,9 @@ public:
 	void findPhoneStop();
 	bool findPhoneActive();
 
+	/** Adds a fake notification, for testing the UI from the dev console. */
+	void debugInject(const std::string& title, const std::string& message);
+
 private:
 	ANCS::Client ancs;
 	AMS::Client ams;
@@ -84,11 +94,34 @@ private:
 	void onModify(Notif notif);
 	void onRemove(uint32_t id);
 
-	// TODO: const size backed dequeue
-	// TODO: mutex
+	// Guards notifs and the stale-tracking state. Sources call in from their own tasks
+	// (ANCS workers, Android, BTC), the UI reads from the LVGL task.
+	mutable std::recursive_mutex mut;
 	std::deque<Notif> notifs;
 
 	auto findNotif(uint32_t id);
+
+	/**
+	 * Notifications survive a disconnect so the user can still read them. They are
+	 * marked stale; on reconnect the phone re-sends what it still has (iOS flags those
+	 * "pre-existing"), which replaces the stale copies. Whatever wasn't re-sent within
+	 * StaleGraceMs is gone from the phone too, and gets removed.
+	 */
+	std::unordered_set<uint32_t> stale;
+	static constexpr uint64_t StaleGraceMs = 15000;
+	esp_timer_handle_t sweepTimer = nullptr;
+	void sweepStale();
+	void removeLocked(std::deque<Notif>::iterator it);
+	bool matchesStale(const Notif& notif);
+
+	bool hadSession = false;	// a phone connected at least once since boot
+	uint64_t connectMs = 0;
+
+	// Alert rate limiting, so a burst (e.g. reconnect re-sends) beeps at most once
+	static constexpr uint64_t AlertCooldownMs = 4000;
+	uint64_t lastAlertMs = 0;
+	bool takeAlert();
+	uint32_t debugUid = 0xF0000000;
 };
 
 

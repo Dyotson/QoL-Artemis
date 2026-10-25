@@ -2,6 +2,8 @@
 #include "Client.h"
 #include "Server.h"
 #include "ConMan.h"
+#include "Services/Diagnostics.h"
+#include "Util/Services.h"
 #include <cstring>
 #include <esp_log.h>
 #include <esp_gatt_common_api.h>
@@ -52,9 +54,18 @@ void BLE::GAP::ble_GAP_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* 
 	// TODO: handle ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT -> contains connection parameters (min & max interval, etc.)
 
 	switch(event){
-		case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
-			ConMan.confDone(param->update_conn_params.status == ESP_BT_STATUS_SUCCESS);
+		case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:{
+			const auto& p = param->update_conn_params;
+			ESP_LOGI(TAG, "conn params: status %d, interval %d (%.2fms), latency %d, timeout %dms", p.status, p.conn_int,
+					 p.conn_int * 1.25f, p.latency, p.timeout * 10);
+			if(p.status == ESP_BT_STATUS_SUCCESS){
+				if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+					diag->onBleConnParams(p.conn_int, p.latency, p.timeout);
+				}
+			}
+			ConMan.confDone(p.status == ESP_BT_STATUS_SUCCESS);
 			break;
+		}
 
 		case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
 			configDone(Config::ScanResponse);

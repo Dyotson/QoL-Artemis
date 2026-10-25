@@ -122,8 +122,22 @@ void SleepMan::shutdown(){
 }
 
 void SleepMan::loop(){
+	if(sleepRequested){
+		sleepRequested = false;
+		goSleep();
+		return;
+	}
+
 	checkAutoSleep();
 	checkEvents();
+}
+
+void SleepMan::requestSleep(){
+	sleepRequested = true;
+}
+
+bool SleepMan::isSleeping() const{
+	return inSleep;
 }
 
 void SleepMan::checkEvents(){

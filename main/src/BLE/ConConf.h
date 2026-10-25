@@ -20,6 +20,11 @@ private:
 	esp_ble_conn_update_params_t pending = {};
 	std::mutex confMut;
 
+	// A rejected request is retried once; the stock code retried forever, which with a
+	// phone that keeps rejecting turned into a tight request/reject loop on the link.
+	static constexpr uint8_t MaxRetries = 1;
+	uint8_t retries = 0;
+
 	bool hasCurrent() const;
 	bool hasPending() const;
 

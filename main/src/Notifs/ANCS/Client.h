@@ -53,6 +53,7 @@ private:
 		uint32_t uid;
 		CategoryID category;
 		bool modify; // whether it's a new notification or a modification
+		uint8_t flags = 0; // ANCS EventFlags (silent, important, pre-existing, ...)
 		AttrMap attrs;
 		AttributeID currAttr = AttributeID::COUNT;
 		uint32_t currAttrLen = 0;

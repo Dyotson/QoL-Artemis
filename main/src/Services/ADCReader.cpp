@@ -48,7 +48,24 @@ float ADCReader::getValue() const{
 
 void ADCReader::resetEma(){
 	value = -1;
-	sample();
+
+	// A single conversion right after an ADC re-init (e.g. waking from light sleep) is
+	// occasionally way off. Seed the filter with the median of a few conversions instead,
+	// so one bad read can't be mistaken for a critically low battery.
+	constexpr int N = 7;
+	int reads[N];
+	int got = 0;
+	for(int i = 0; i < N; i++){
+		int raw = 0;
+		if(adc.read(chan, raw, cali) == ESP_OK){
+			reads[got++] = raw;
+		}
+	}
+
+	if(got == 0) return;
+
+	std::nth_element(reads, reads + got / 2, reads + got);
+	value = (float) reads[got / 2];
 }
 
 void ADCReader::setMoreOffset(float offset){
