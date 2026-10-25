@@ -11,6 +11,7 @@
 #include <esp_bt_defs.h>
 #include <esp_gatt_defs.h>
 #include <esp_gattc_api.h>
+#include <esp_timer.h>
 
 namespace BLE {
 
@@ -31,6 +32,19 @@ public:
 	~Client();
 
 	std::shared_ptr<Service> addService(esp_bt_uuid_t uuid);
+
+	/** Whether the link may be dropped when discovery fails (e.g. not for Android phones) */
+	void setRecoveryAllowed(std::function<bool()> fn);
+
+	struct Status {
+		bool linked;		// GATT client connection exists
+		bool opened;
+		bool paired;		// link encrypted
+		bool discovering;	// MTU/discovery started
+		uint8_t established;	// registered services found on the phone
+		uint8_t populated;		// ... whose characteristics were set up
+	};
+	Status getStatus();
 
 private:
 	static Client* self;
@@ -76,6 +90,24 @@ private:
 	void onMtuResp(const esp_ble_gattc_cb_param_t::gattc_cfg_mtu_evt_param* param);
 
 	void maybeStartDiscovery();
+
+	// Watchdogs: if the link isn't encrypted, or no registered service got set up, shortly
+	// after connecting, ask again (a few times).
+	static constexpr uint64_t DiscoveryTimeoutUs = 10ULL * 1000 * 1000;
+	static constexpr uint8_t MaxRetries = 3;
+	esp_timer_handle_t discoveryTimer = nullptr;
+
+	// iOS may encrypt the link before ESP_GATTC_CONNECT_EVT arrives. Remember that the
+	// current link already authenticated so onConnect() doesn't forget it.
+	bool authOnLink = false;
+
+	static constexpr uint64_t EncryptTimeoutUs = 8ULL * 1000 * 1000;
+	esp_timer_handle_t encryptTimer = nullptr;
+	uint8_t encryptRetries = 0;
+	void onEncryptTimeout();
+	uint8_t discoveryRetries = 0;
+	void onDiscoveryTimeout();
+	std::function<bool()> recoveryAllowed;
 	void searchServices();
 	void onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_res_evt_param* param);
 	void onSearchComplete(const esp_ble_gattc_cb_param_t::gattc_search_cmpl_evt_param* param);

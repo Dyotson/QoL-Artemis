@@ -37,6 +37,11 @@ Diagnostics::Diagnostics() : resetReason(esp_reset_reason()){
 	nvs_set_blob(handle, BlobName, &bootLog, sizeof(bootLog));
 	nvs_commit(handle);
 
+	uint8_t logLevel;
+	if(nvs_get_u8(handle, "logLevel", &logLevel) == ESP_OK && logLevel <= ESP_LOG_VERBOSE){
+		esp_log_level_set("*", (esp_log_level_t) logLevel);
+	}
+
 	printf("Boot #%lu, reset reason: %s, previous uptime: %lus\n", bootLog.bootCount, reasonText(resetReason), prevUptime);
 	if(hasCoredump()){
 		printf("Stored crash: %s\n", coredumpSummary().c_str());
@@ -156,4 +161,9 @@ const char* Diagnostics::bleReasonText(uint8_t reason){
 
 void Diagnostics::tick(){
 	rtcUptime = (uint32_t) (millis() / 1000);
+}
+
+void Diagnostics::setBootLogLevel(uint8_t level){
+	nvs_set_u8(handle, "logLevel", level);
+	nvs_commit(handle);
 }

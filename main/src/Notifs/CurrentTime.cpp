@@ -3,7 +3,7 @@
 #include "Util/Services.h"
 #include "Util/stdafx.h"
 
-CurrentTime::CurrentTime(BLE::Client* client) : Threaded("CurrentTime", 2 * 1024){
+CurrentTime::CurrentTime(BLE::Client* client) : Threaded("CurrentTime", 3 * 1024){
 	service = client->addService(ServiceUUID);
 	chr = service->addChar(CharUUID, ESP_GATT_CHAR_PROP_BIT_NOTIFY | ESP_GATT_CHAR_PROP_BIT_READ);
 

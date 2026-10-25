@@ -61,6 +61,9 @@ public:
 
 	static const char* bleReasonText(uint8_t reason);
 
+	/** Log level applied at every boot (persists). For debugging via the dev console. */
+	void setBootLogLevel(uint8_t level);
+
 	/** Called periodically so a later crash can report how long the watch had been running */
 	void tick();
 

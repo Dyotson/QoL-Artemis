@@ -22,6 +22,15 @@ public:
 	void goLowPow();
 	void goHiPow();
 
+	/** Temporarily use the fast connection interval (e.g. while setting up a new link). */
+	void setBoost(bool boost);
+
+	bool isConnected();
+
+	// Never close the link from the watch side: iOS treats an accessory-initiated
+	// disconnect ("remote user terminated") as intentional and stops auto-reconnecting
+	// to it until the user connects or re-pairs manually.
+
 private:
 	friend BLE::GAP;
 	void confDone(bool success);
@@ -44,6 +53,7 @@ private:
 	bool wantAdv = false;
 
 	bool lowPow = false;
+	bool boost = false;
 
 	void startAdv();
 	void stopAdv();

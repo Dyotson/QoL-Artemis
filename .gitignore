@@ -6,4 +6,5 @@ build
 sdkconfig*
 !sdkconfig
 
-spiffs.bin__pycache__/
+spiffs.bin
+__pycache__/

@@ -42,6 +42,7 @@
 #include "Screens/PerseCtrl/TCPClient.h"
 #include "Services/Diagnostics.h"
 #include "Services/DevConsole.h"
+#include "BLE/ConMan.h"
 #include "Settings/ExtSettings.h"
 
 LVGL* lvgl;
@@ -184,6 +185,15 @@ void init(){
 	auto phone = new Phone(server, client);
 	server->start();
 	Services.set(Service::Phone, phone);
+	client->setRecoveryAllowed([phone](){ return phone->getPhoneType() != Phone::PhoneType::Android; });
+
+	DevConsole::addCommand("phone", "phone link / notification service state", [phone, client](const DevConsole::Args&){
+		const auto st = client->getStatus();
+		const char* types[] = { "none", "Android", "iPhone" };
+		printf("link %d, gatt open %d, encrypted %d, discovery %d, services found %d, set up %d\n",
+			   ConMan.isConnected(), st.opened, st.paired, st.discovering, st.established, st.populated);
+		printf("phone type: %s, notifications: %lu\n", types[(int) phone->getPhoneType()], phone->getNotifsCount());
+	});
 
 	srand(esp_random());
 

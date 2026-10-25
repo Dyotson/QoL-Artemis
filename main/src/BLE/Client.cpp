@@ -1,5 +1,6 @@
 #include "Client.h"
 #include "GAP.h"
+#include "ConMan.h"
 #include <cstring>
 #include <esp_log.h>
 #include <esp_gap_ble_api.h>
@@ -27,11 +28,29 @@ BLE::Client::Client(GAP* gap) : gap(gap){
 
 	// TODO: This is only needed so GAP can notify the GATT Client when pairing is done
 	gap->setClient(this);
+
+	const esp_timer_create_args_t args = {
+			.callback = [](void* arg){ static_cast<Client*>(arg)->onDiscoveryTimeout(); },
+			.arg = this,
+			.dispatch_method = ESP_TIMER_TASK,
+			.name = "GATTCDisc",
+			.skip_unhandled_events = true
+	};
+	esp_timer_create(&args, &discoveryTimer);
+
+	esp_timer_create_args_t encArgs = args;
+	encArgs.callback = [](void* arg){ static_cast<Client*>(arg)->onEncryptTimeout(); };
+	encArgs.name = "GATTCEnc";
+	esp_timer_create(&encArgs, &encryptTimer);
 }
 
 BLE::Client::~Client(){
 	self = nullptr;
 	gap->setClient(nullptr);
+}
+
+void BLE::Client::setRecoveryAllowed(std::function<bool()> fn){
+	recoveryAllowed = std::move(fn);
 }
 
 std::shared_ptr<BLE::Client::Service> BLE::Client::addService(esp_bt_uuid_t uuid){
@@ -105,8 +124,12 @@ void BLE::Client::onConnect(const esp_ble_gattc_cb_param_t::gattc_connect_evt_pa
 	// AUTH_CMPL event arrives before ESP_GATTC_OPEN_EVT (see maybeStartDiscovery).
 	con.hndl = param->conn_id;
 	con.opened = false;
-	con.paired = false;
+	con.paired = authOnLink;
 	con.discovering = false;
+
+	// Run the setup (encryption, discovery, subscriptions) on a fast link interval, even
+	// when the screen is off: at the low-power interval it takes many seconds.
+	ConMan.setBoost(true);
 
 	// Server notifies ConMan, which in turn sets connection parameters
 
@@ -122,7 +145,9 @@ void BLE::Client::onConnect(const esp_ble_gattc_cb_param_t::gattc_connect_evt_pa
 
 void BLE::Client::onPairDone(){
 	// Link is now encrypted. Discovery proceeds once the connection is also open.
+	authOnLink = true;
 	con.paired = true;
+	if(encryptTimer) esp_timer_stop(encryptTimer);
 	maybeStartDiscovery();
 }
 
@@ -138,9 +163,51 @@ void BLE::Client::onOpen(const esp_ble_gattc_cb_param_t::gattc_open_evt_param* p
 	// Now that the GATT client connection (clcb) exists, start pairing. When it
 	// completes, ESP_GAP_BLE_AUTH_CMPL_EVT fires (handled by BLE) and BLE calls
 	// onPairDone(). Discovery proceeds once the link is also encrypted.
-	esp_ble_set_encryption(con.addr, ESP_BLE_SEC_ENCRYPT_MITM);
+	if(!con.paired){
+		esp_ble_set_encryption(con.addr, ESP_BLE_SEC_ENCRYPT_MITM);
+		encryptRetries = 0;
+		if(encryptTimer){
+			esp_timer_stop(encryptTimer);
+			esp_timer_start_once(encryptTimer, EncryptTimeoutUs);
+		}
+	}
 
 	maybeStartDiscovery();
+}
+
+void BLE::Client::onEncryptTimeout(){
+	if(!con || !con.opened || con.paired) return;
+	if(encryptRetries >= MaxRetries) return;
+
+	encryptRetries++;
+	ESP_LOGW(TAG, "Link not encrypted yet, requesting again (%d)", encryptRetries);
+	esp_ble_set_encryption(con.addr, ESP_BLE_SEC_ENCRYPT_MITM);
+	esp_timer_start_once(encryptTimer, EncryptTimeoutUs);
+}
+
+void BLE::Client::onDiscoveryTimeout(){
+	if(!con || !con.discovering) return;
+
+	for(const auto& svc : services){
+		if(svc->populated()){
+			// Discovery went through; setup traffic is over, back to normal link parameters
+			ConMan.setBoost(false);
+			return;
+		}
+	}
+
+	// Not dropping the link here on purpose: iOS backs off from reconnecting to an
+	// accessory that keeps closing the connection, which is worse than retrying.
+	if((recoveryAllowed && !recoveryAllowed()) || discoveryRetries >= MaxRetries){
+		// e.g. an Android phone: it talks to our GATT server and has none of these services
+		ConMan.setBoost(false);
+		return;
+	}
+
+	discoveryRetries++;
+	ESP_LOGW(TAG, "No services after discovery, searching again (%d)", discoveryRetries);
+	searchServices();
+	esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
 }
 
 void BLE::Client::maybeStartDiscovery(){
@@ -152,24 +219,37 @@ void BLE::Client::maybeStartDiscovery(){
 	if(!con.opened || !con.paired || con.discovering) return;
 	con.discovering = true;
 
-	esp_ble_gattc_send_mtu_req(iface.hndl, con.hndl);
+	discoveryRetries = 0;
+	if(discoveryTimer){
+		esp_timer_stop(discoveryTimer);
+		esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
+	}
+
+	// No MTU request of our own: the ATT MTU is shared by both directions of the link and
+	// iOS always negotiates it as soon as it connects. When the phone got there first, our
+	// request was never answered, and every discovery request queued up behind it - the
+	// link stayed up while ANCS was never found.
+	searchServices();
 }
 
 void BLE::Client::onMtuResp(const esp_ble_gattc_cb_param_t::gattc_cfg_mtu_evt_param* param){
 	if(param->status != ESP_GATT_OK){
-		ESP_LOGE(TAG, "config mtu failed, error status = 0c%x", param->status);
-		return;
+		// Expected when the iPhone already ran its own MTU exchange on this link (it races
+		// ours right after connecting). The stock code stopped here, leaving the link up
+		// but ANCS never discovered: iOS showed "Connected" while the watch didn't.
+		ESP_LOGW(TAG, "config mtu failed (status 0x%x), continuing with discovery", param->status);
+	}else{
+		con.MTU_size = param->mtu;
 	}
-
-	con.MTU_size = param->mtu; // TODO: check if this really sets the MTU on the remote device side
 
 	searchServices();
 }
 
 void BLE::Client::searchServices(){
-	for(const auto& service : services){
-		esp_ble_gattc_search_service(iface.hndl, con.hndl, &service->uuid);
-	}
+	// One "discover all primary services" request; onSearchResult matches the results to
+	// our registered services. Issuing one filtered search per service back to back got
+	// all but the first rejected, since the stack runs a single discovery at a time.
+	esp_ble_gattc_search_service(iface.hndl, con.hndl, nullptr);
 }
 
 void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_res_evt_param* param){
@@ -194,7 +274,6 @@ void BLE::Client::onSearchComplete(const esp_ble_gattc_cb_param_t::gattc_search_
 		svc->pull();
 	}
 
-	// TODO: disconnect if no registered service is found on remote server
 }
 
 void BLE::Client::onClose(const esp_ble_gattc_cb_param_t::gattc_close_evt_param* param){
@@ -266,6 +345,10 @@ void BLE::Client::close(){
 
 	// Reset to the "no connection" sentinel that ConnectionInfo::operator bool
 	// checks (0xffff), not 0 — otherwise a closed connection still reads as valid.
+	if(discoveryTimer) esp_timer_stop(discoveryTimer);
+	if(encryptTimer) esp_timer_stop(encryptTimer);
+	authOnLink = false;
+
 	con.hndl = 0xffff;
 	con.opened = false;
 	con.paired = false;
@@ -273,4 +356,20 @@ void BLE::Client::close(){
 	memset(con.addr, 0, 6);
 
 	// Server notifies ConMan, which in turn starts advertising
+}
+
+BLE::Client::Status BLE::Client::getStatus(){
+	Status st = {
+			.linked = (bool) con,
+			.opened = con.opened,
+			.paired = con.paired,
+			.discovering = con.discovering,
+			.established = 0,
+			.populated = 0
+	};
+	for(const auto& svc : services){
+		if(svc->established()) st.established++;
+		if(svc->populated()) st.populated++;
+	}
+	return st;
 }

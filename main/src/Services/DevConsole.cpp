@@ -215,6 +215,12 @@ void DevConsole::registerBuiltins(){
 		esp_log_level_set(args[1].c_str(), (esp_log_level_t) atoi(args[2].c_str()));
 	});
 
+	addCommand("bootlog", "bootlog <0-5>  - log level applied from boot (persists)", [](const Args& args){
+		auto diag = (Diagnostics*) Services.get(Service::Diag);
+		if(!diag || args.size() < 2) return;
+		diag->setBootLogLevel(atoi(args[1].c_str()));
+	});
+
 	addCommand("notif", "notif <title> <message...>  - inject a test notification", [](const Args& args){
 		auto phone = (Phone*) Services.get(Service::Phone);
 		if(!phone || args.size() < 2) return;

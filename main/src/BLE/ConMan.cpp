@@ -44,10 +44,20 @@ void ConManager::connect(const esp_bd_addr_t addr){
 	stopAdv();
 }
 
+void ConManager::setBoost(bool en){
+	std::lock_guard lock(mut);
+	if(boost == en) return;
+	boost = en;
+	if(connected && lowPow){
+		setCon();
+	}
+}
+
 void ConManager::disconnect(){
 	std::lock_guard lock(mut);
 
 	connected = false;
+	boost = false;
 	conConf.reset();
 
 	// Start over with fast advertising so the phone picks us up again quickly
@@ -166,7 +176,12 @@ void ConManager::onAdvStopComplete(bool success){
 void ConManager::setCon(){
 	/* For the IOS system, please reference the apple official documents about the ble connection parameters restrictions. */
 	esp_ble_conn_update_params_t params = {};
-	memcpy(&params, lowPow ? &ConLowPow : &ConHiPow, sizeof(esp_ble_conn_update_params_t));
+	memcpy(&params, (lowPow && !boost) ? &ConLowPow : &ConHiPow, sizeof(esp_ble_conn_update_params_t));
 	memcpy(params.bda, current, 6);
 	conConf.conf(params);
+}
+
+bool ConManager::isConnected(){
+	std::lock_guard lock(mut);
+	return connected;
 }
