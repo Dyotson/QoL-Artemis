@@ -76,6 +76,8 @@ void CallScreen::loop(){
 	if(millis() - notifTime < NotifInterval) return;
 	notifTime = millis();
 
+	if(quiet) return; // no LED flashing during quiet hours either
+
 	auto status = (StatusCenter*) Services.get(Service::Status);
 	status->blinkAllTwice();
 }
@@ -90,10 +92,12 @@ void CallScreen::onStart(){
 	}
 
 	// Ringtone: the Space Harrier theme from the Japanese Master System BIOS, on loop.
-	// Calls ring during quiet hours too (those only silence notification beeps).
+	// Quiet hours silence calls too.
 	auto settings = (Settings*) Services.get(Service::Settings);
+	auto status = (StatusCenter*) Services.get(Service::Status);
 	auto melody = (MelodyPlayer*) Services.get(Service::Melody);
-	if(melody && settings->get().notificationSounds){
+	quiet = status && status->inQuietHours();
+	if(melody && settings->get().notificationSounds && !quiet){
 		size_t n;
 		auto tone = MelodyPlayer::ringtone(n);
 		melody->play(tone, n, true);

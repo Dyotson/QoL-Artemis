@@ -31,6 +31,7 @@ private:
 	void onStop() override;
 
 	static std::atomic<bool> shown;
+	bool quiet = false; // quiet hours: no ringtone, no LEDs
 
 	EventQueue evts;
 	bool altPress = false;

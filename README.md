@@ -51,7 +51,8 @@ weather and world time.
   answer, ignore or reject. (The stock firmware only reacted with the screen on, and just
   blinked the LEDs.)
 - **Quiet hours**: turn the switch on in Settings and set *Quiet from* / *Quiet until*; in that
-  window notifications don't beep or blink. Calls and alarms still ring.
+  window notifications and calls don't beep, blink or wake the watch (a call still shows if
+  you look at the watch). Alarms still ring.
 - Optional **phone-lost alert**: beeps if the phone stays out of reach for a minute.
 - **System info**: battery, phone link, drops, crashes, time zone.
 

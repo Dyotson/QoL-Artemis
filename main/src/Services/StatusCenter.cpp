@@ -107,8 +107,12 @@ void StatusCenter::processPhone(const Phone::Event& evt){
 void StatusCenter::showCall(){
 	// Wake the display without the lock screen, then open the call screen on the UI thread
 	// (which runs again once the display is on). Works from sleep and from any app.
+	// During quiet hours a sleeping watch stays asleep (the call shows if you wake it).
 	if(auto sleep = (SleepMan*) Services.get(Service::Sleep)){
-		if(sleep->isSleeping()) sleep->wake(true);
+		if(sleep->isSleeping()){
+			if(inQuietHours()) return;
+			sleep->wake(true);
+		}
 	}
 	if(auto lvgl = (LVGL*) Services.get(Service::LVGL)){
 		lvgl->runOnUI([lvgl](){

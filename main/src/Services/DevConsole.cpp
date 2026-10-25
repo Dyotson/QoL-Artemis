@@ -7,6 +7,8 @@
 #include "Services/Time.h"
 #include "Services/Weather.h"
 #include "Devices/Battery.h"
+#include "Services/StatusCenter.h"
+#include "Settings/ExtSettings.h"
 #include "Services/MelodyPlayer.h"
 #include "Pins.hpp"
 #include "Util/Events.h"
@@ -259,6 +261,21 @@ void DevConsole::registerBuiltins(){
 			Events::post(Facility::Battery, Battery::Event{ .action = Battery::Event::LevelChange, .level = level });
 			if(i % 50 == 0) vTaskDelay(1);
 		}
+	});
+
+	addCommand("quiet", "quiet [on|off <from> <to>]  - show / temporarily set quiet hours (not saved)", [](const Args& args){
+		auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+		auto status = (StatusCenter*) Services.get(Service::Status);
+		if(!ext) return;
+		auto e = ext->get();
+		if(args.size() >= 4){
+			e.quietHours = args[1] == "on";
+			e.quietStart = atoi(args[2].c_str());
+			e.quietEnd = atoi(args[3].c_str());
+			ext->set(e);
+		}
+		printf("quiet hours %s, %02d:00-%02d:00, active now: %d\n", e.quietHours ? "on" : "off", e.quietStart, e.quietEnd,
+			   status ? status->inQuietHours() : -1);
 	});
 
 	addCommand("melody", "is a melody (ringtone/alarm) playing", [](const Args&){
