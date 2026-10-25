@@ -5,6 +5,8 @@
 #include "LV_Interface/LVGL.h"
 #include "Notifs/Phone.h"
 #include "Services/Time.h"
+#include "Services/Weather.h"
+#include "Services/MelodyPlayer.h"
 #include "Pins.hpp"
 #include "Util/Events.h"
 #include "Util/Services.h"
@@ -230,7 +232,7 @@ void DevConsole::registerBuiltins(){
 		}
 	});
 
-	addCommand("wx", "wx <text>  - feed a weather update, e.g. wx ARTEMIS-WX|18 C|Partly Cloudy|24 C|12 C", [](const Args& args){
+	addCommand("wx", "wx <text>  - feed a weather update as the Shortcuts app, e.g. wx 18 C|Partly Cloudy|24 C|12 C", [](const Args& args){
 		auto phone = (Phone*) Services.get(Service::Phone);
 		if(!phone || args.size() < 2) return;
 		std::string text;
@@ -238,7 +240,37 @@ void DevConsole::registerBuiltins(){
 			if(!text.empty()) text += ' ';
 			text += args[i];
 		}
-		phone->debugInject("Shortcuts", text);
+		phone->debugInject("Artemis Weather", text, "com.apple.shortcuts");
+	});
+
+	addCommand("call", "call [end]  - simulate an incoming call / end it", [](const Args& args){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(!phone) return;
+		if(args.size() > 1 && args[1] == "end") phone->debugEndCall();
+		else phone->debugCall("Test caller");
+	});
+
+	addCommand("melody", "is a melody (ringtone/alarm) playing", [](const Args&){
+		auto melody = (MelodyPlayer*) Services.get(Service::Melody);
+		auto sleep = (SleepMan*) Services.get(Service::Sleep);
+		printf("melody %s, screen %s\n", melody && melody->isPlaying() ? "playing" : "silent", sleep && sleep->isSleeping() ? "off" : "on");
+	});
+
+	addCommand("notifs", "list notifications on the watch (app, title, message)", [](const Args&){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(!phone) return;
+		for(const auto& n : phone->getNotifs()){
+			printf("0x%08lx cat %d %s%s app='%s' title='%s' msg='%s'\n", n.uid, (int) n.category, n.silent ? "silent " : "",
+				   n.preExisting ? "pre " : "", n.appID.c_str(), n.title.c_str(), n.message.c_str());
+		}
+	});
+
+	addCommand("wxstate", "show the stored weather", [](const Args&){
+		auto weather = (Weather*) Services.get(Service::Weather);
+		if(!weather) return;
+		const auto d = weather->get();
+		printf("valid %d temp %d%c '%s' hi %d lo %d icon %d age %ld min fresh %d\n", d.valid, d.temp, d.unit, d.condition, d.high, d.low,
+			   (int) d.icon, weather->ageMinutes(), weather->fresh());
 	});
 
 	addCommand("bootlog", "bootlog <0-5>  - log level applied from boot (persists)", [](const Args& args){

@@ -263,10 +263,10 @@ void Phone::onMediaState(MediaState state){
 }
 
 bool Phone::consumeWeather(const Notif& notif){
-	if(!Weather::isWeatherText(notif.title, notif.message)) return false;
+	if(!Weather::isWeatherNotif(notif.appID, notif.title, notif.message)) return false;
 
 	if(auto weather = (Weather*) Services.get(Service::Weather)){
-		weather->ingest(notif.title, notif.message);
+		weather->ingest(notif.title, notif.message, notif.hour, notif.minute);
 	}
 
 	// It was only a carrier for the data: clear it from the iPhone's notification center
@@ -360,14 +360,32 @@ bool Phone::findPhoneActive(){
 	return android.findPhoneActive();
 }
 
-void Phone::debugInject(const std::string& title, const std::string& message){
+void Phone::debugInject(const std::string& title, const std::string& message, const std::string& appID){
 	Notif notif = {
 			.uid = debugUid++,
 			.title = title,
 			.message = message,
-			.appID = "Messages",
+			.appID = appID,
 			.category = Notif::Category::Social
 	};
 	ESP_LOGI(TAG, "Injecting test notification 0x%lx", notif.uid);
 	onAdd(std::move(notif));
+}
+
+void Phone::debugCall(const std::string& caller){
+	Notif notif = {
+			.uid = debugUid++,
+			.title = caller,
+			.message = "Incoming call",
+			.appID = "com.apple.mobilephone",
+			.category = Notif::Category::IncomingCall
+	};
+	onAdd(std::move(notif));
+}
+
+void Phone::debugEndCall(){
+	const auto call = getCall();
+	if(call.category == Notif::Category::IncomingCall){
+		onRemove(call.uid);
+	}
 }

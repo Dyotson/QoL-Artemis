@@ -2,6 +2,7 @@
 #define ARTEMIS_FIRMWARE_WEATHER_H
 
 #include <nvs.h>
+#include <esp_timer.h>
 #include <mutex>
 #include <string>
 #include <ctime>
@@ -38,11 +39,19 @@ public:
 		time_t updated = 0;		// local epoch (watch time) when received
 	};
 
-	/** True if the text carries a weather update (the tag) */
-	static bool isWeatherText(const std::string& title, const std::string& message);
+	/**
+	 * True if a notification carries a weather update: either it contains the tag, or it
+	 * comes from the Shortcuts app and its text looks like "temp|condition|high|low"
+	 * (the tag is optional, so the shortcut can keep its default notification title).
+	 */
+	static bool isWeatherNotif(const std::string& appID, const std::string& title, const std::string& message);
 
-	/** Parse and store an update. Returns false if it couldn't be parsed. */
-	bool ingest(const std::string& title, const std::string& message);
+	/**
+	 * Parse and store an update. Returns false if it couldn't be parsed.
+	 * postedHour/Minute: when the phone posted it (phone-local), -1 if unknown. Used so
+	 * an old update re-sent after a reconnect doesn't count as fresh, or replace a newer one.
+	 */
+	bool ingest(const std::string& title, const std::string& message, int8_t postedHour = -1, int8_t postedMinute = -1);
 
 	Data get() const;
 
@@ -67,6 +76,10 @@ private:
 	static Icon iconFor(const char* condition, bool night);
 	static bool parseNumber(const std::string& s, int16_t& out, char* unit = nullptr);
 	void store();
+
+	// Persisting touches flash, which needs more stack than the ANCS worker that delivers
+	// updates has; defer it to the esp_timer task
+	esp_timer_handle_t storeTimer = nullptr;
 };
 
 

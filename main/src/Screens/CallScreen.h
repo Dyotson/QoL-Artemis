@@ -3,11 +3,14 @@
 
 #include "Notifs/Notif.h"
 #include "LV_Interface/LVScreen.h"
+#include <atomic>
 #include "LV_Interface/LVStyle.h"
 #include "Util/Events.h"
 
 class CallScreen : public LVScreen {
 public:
+	/** Whether a call screen currently exists (used to avoid opening a second one) */
+	static bool isShown();
 	CallScreen();
 	~CallScreen() override;
 
@@ -26,6 +29,8 @@ private:
 	uint32_t notifTime;
 	void onStart() override;
 	void onStop() override;
+
+	static std::atomic<bool> shown;
 
 	EventQueue evts;
 	bool altPress = false;

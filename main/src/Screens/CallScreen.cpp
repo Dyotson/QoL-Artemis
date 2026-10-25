@@ -6,6 +6,7 @@
 #include "Screens/Lock/LockScreen.h"
 #include "Services/StatusCenter.h"
 #include "Services/MelodyPlayer.h"
+#include "Services/SleepMan.h"
 
 CallScreen::CallScreen() : evts(6){
 	auto phone = (Phone* ) Services.get(Service::Phone);
@@ -19,6 +20,7 @@ CallScreen::CallScreen() : evts(6){
 		return;
 	}
 
+	shown = true;
 	buildUI();
 	Events::listen(Facility::Phone, &evts);
 	Events::listen(Facility::Input, &evts);
@@ -26,6 +28,15 @@ CallScreen::CallScreen() : evts(6){
 
 CallScreen::~CallScreen(){
 	Events::unlisten(&evts);
+	if(notif.category == Notif::Category::IncomingCall){
+		shown = false;
+	}
+}
+
+std::atomic<bool> CallScreen::shown{ false };
+
+bool CallScreen::isShown(){
+	return shown;
 }
 
 void CallScreen::onIgnore(){
@@ -72,6 +83,12 @@ void CallScreen::loop(){
 void CallScreen::onStart(){
 	notifTime = millis();
 
+	// Keep the screen on while it rings: auto-sleep or lowering the wrist would stop the
+	// screen and with it the ringtone
+	if(auto sleep = (SleepMan*) Services.get(Service::Sleep)){
+		sleep->enAutoSleep(false);
+	}
+
 	// Ringtone: the Space Harrier theme from the Japanese Master System BIOS, on loop
 	auto settings = (Settings*) Services.get(Service::Settings);
 	auto status = (StatusCenter*) Services.get(Service::Status);
@@ -86,6 +103,9 @@ void CallScreen::onStart(){
 void CallScreen::onStop(){
 	if(auto melody = (MelodyPlayer*) Services.get(Service::Melody)){
 		melody->stop();
+	}
+	if(auto sleep = (SleepMan*) Services.get(Service::Sleep)){
+		sleep->enAutoSleep(true);
 	}
 }
 

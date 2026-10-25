@@ -42,8 +42,10 @@ weather and world time.
   IANA time zone database).
 - **Stopwatch** with laps, **timer**, and **3 alarms** (once / daily / weekdays / weekends,
   snooze). They keep running with the screen off and wake the watch when they ring.
-- **Incoming-call ringtone**: the *Space Harrier* theme from the Japanese Sega Master System /
-  Mark III BIOS. (The stock firmware just blinked the LEDs.)
+- **Incoming calls wake the watch** — from sleep or from any app — and ring with the
+  *Space Harrier* theme from the Japanese Sega Master System / Mark III BIOS until you
+  answer, ignore or reject. (The stock firmware only reacted with the screen on, and just
+  blinked the LEDs.)
 - **Quiet hours** (no notification beeps at night) and an optional **phone-lost alert**.
 - **System info**: battery, phone link, drops, crashes, time zone.
 
@@ -97,15 +99,18 @@ weather, and clears the notification from your iPhone — you never see it.
 **1. Create the shortcut** (Shortcuts app → **+**), name it *Artemis Weather*:
 
 1. Add **Get Current Weather** (current location).
-2. Add **Show Notification**:
-   - Title: `ARTEMIS-WX`
-   - Body: the *Weather Conditions* variable four times, separated by `|`, choosing a
-     different detail each time (tap the variable → pick the detail):
-     `Temperature|Condition|High|Low`
+2. Add **Show Notification**. Leave the title as it is; set the body to the *Weather
+   Conditions* variable four times, separated by `|`, choosing a different detail each time
+   (tap the variable → pick the detail):
 
-   It should look like `ARTEMIS-WX` / `18°C|Partly Cloudy|24°C|12°C` when it runs. Any language
-   and °C or °F work.
+   `Temperature|Condition|High|Low`
+
+   When it runs, the notification text looks like `24°C|Cloudy|24°C|8°C`. Any language
+   and °C or °F work; the temperature has to come first.
 3. Run it once and allow the location / notification permissions.
+
+The watch recognizes these notifications (from the Shortcuts app, in that format), shows the
+weather and clears them from the iPhone.
 
 **2. Run it automatically** (Shortcuts → **Automation** → **+** → **Time of Day**): pick a
 time, *Repeat: Daily*, choose **Run Immediately**, and select *Artemis Weather*. Add a few
@@ -152,7 +157,8 @@ Use Python 3.12 or older for this IDF version.
 
 - `tools/watch.py` — talks to the watch's USB dev console: `watch.py cmd help`,
   `watch.py shot out.png` (screenshot), `watch.py cmd diag` (reset history, link stats),
-  `watch.py cmd wx ARTEMIS-WX|18 C|Clear|20 C|10 C` (test a weather update).
+  `watch.py cmd wx 18 C|Clear|20 C|10 C` (test a weather update), `watch.py cmd call`
+  (simulate an incoming call), `watch.py cmd notifs` (list notifications).
 - `tools/gen_icons.py` — menu icons for every theme, in each theme's palette.
 - `tools/gen_weather_icons.py` — weather icons and the degree-sign font.
 - `tools/gen_ringtone.py` — renders the ringtone from a MIDI file into chirp data.

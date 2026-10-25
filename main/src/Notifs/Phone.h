@@ -69,7 +69,9 @@ public:
 	const CurrentTime& getCurrentTime() const { return cTime; }
 
 	/** Adds a fake notification, for testing the UI from the dev console. */
-	void debugInject(const std::string& title, const std::string& message);
+	void debugInject(const std::string& title, const std::string& message, const std::string& appID = "Messages");
+	void debugCall(const std::string& caller);
+	void debugEndCall();
 
 private:
 	ANCS::Client ancs;

@@ -4,6 +4,8 @@
 #include "Pins.hpp"
 #include "Services/Time.h"
 #include "Settings/ExtSettings.h"
+#include "LV_Interface/LVGL.h"
+#include "Screens/CallScreen.h"
 
 StatusCenter::StatusCenter() : Threaded("Status", 2048), events(12),
 chirp(*((ChirpSystem*) Services.get(Service::Audio))),
@@ -79,10 +81,17 @@ void StatusCenter::processPhone(const Phone::Event& evt){
 		esp_timer_start_once(lostTimer, LostAlertMs * 1000);
 	}
 
+	if(evt.action == Phone::Event::Added){
+		const auto notif = phone->getNotif(evt.data.addChgRem.id);
+		if(notif.category == Notif::Category::IncomingCall){
+			showCall();
+		}
+	}
+
 	if((evt.action == Phone::Event::Added || evt.action == Phone::Event::Changed) && evt.alert){
 		const auto notif = phone->getNotif(evt.data.addChgRem.id);
 		const bool isCall = notif.category == Notif::Category::IncomingCall;
-		if(isCall) return; // the call screen plays the ringtone
+		if(isCall) return; // the call screen plays the ringtone (opened below)
 		if(inQuietHours()) return;
 
 		if(settings.get().notificationSounds && !audioBlocked){
@@ -92,6 +101,21 @@ void StatusCenter::processPhone(const Phone::Event& evt){
 		if(settings.get().ledEnable){
 			circularBlink();
 		}
+	}
+}
+
+void StatusCenter::showCall(){
+	// Wake the display without the lock screen, then open the call screen on the UI thread
+	// (which runs again once the display is on). Works from sleep and from any app.
+	if(auto sleep = (SleepMan*) Services.get(Service::Sleep)){
+		if(sleep->isSleeping()) sleep->wake(true);
+	}
+	if(auto lvgl = (LVGL*) Services.get(Service::LVGL)){
+		lvgl->runOnUI([lvgl](){
+			auto phone = (Phone*) Services.get(Service::Phone);
+			if(CallScreen::isShown() || phone->getCall().category != Notif::Category::IncomingCall) return;
+			lvgl->startScreen([](){ return std::make_unique<CallScreen>(); });
+		});
 	}
 }
 

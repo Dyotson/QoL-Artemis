@@ -12,6 +12,15 @@
 static const char* TAG = "Weather";
 
 Weather::Weather(){
+	const esp_timer_create_args_t args = {
+			.callback = [](void* arg){ static_cast<Weather*>(arg)->store(); },
+			.arg = this,
+			.dispatch_method = ESP_TIMER_TASK,
+			.name = "WxStore",
+			.skip_unhandled_events = true
+	};
+	esp_timer_create(&args, &storeTimer);
+
 	if(nvs_open("ArtemisWx", NVS_READWRITE, &handle) != ESP_OK) return;
 
 	size_t size = sizeof(Data);
@@ -22,8 +31,26 @@ Weather::Weather(){
 	}
 }
 
-bool Weather::isWeatherText(const std::string& title, const std::string& message){
-	return title.find(Tag) != std::string::npos || message.find(Tag) != std::string::npos;
+static bool containsNoCase(const std::string& hay, const char* needle){
+	std::string h(hay), n(needle);
+	for(auto& c : h) c = (char) toupper((unsigned char) c);
+	for(auto& c : n) c = (char) toupper((unsigned char) c);
+	return h.find(n) != std::string::npos;
+}
+
+// "24C|Nublado|24C|8C", "18 °C|Partly Cloudy|...", "-3|Snow": a number first, then '|'-separated fields
+static bool looksLikeWeather(const std::string& text){
+	size_t i = 0;
+	while(i < text.size() && text[i] == ' ') i++;
+	if(i < text.size() && text[i] == '-') i++;
+	if(i >= text.size() || !isdigit((unsigned char) text[i])) return false;
+	const size_t bar = text.find('|');
+	return bar != std::string::npos && bar < 12 && bar + 1 < text.size();
+}
+
+bool Weather::isWeatherNotif(const std::string& appID, const std::string& title, const std::string& message){
+	if(containsNoCase(title, Tag) || containsNoCase(message, Tag)) return true;
+	return appID == "com.apple.shortcuts" && looksLikeWeather(message);
 }
 
 bool Weather::parseNumber(const std::string& s, int16_t& out, char* unit){
@@ -76,12 +103,20 @@ Weather::Icon Weather::iconFor(const char* condition, bool night){
 	return Icon::Unknown;
 }
 
-bool Weather::ingest(const std::string& title, const std::string& message){
-	// The fields may be in the message, or in the title if the shortcut put them there
-	std::string text = message.find(Tag) != std::string::npos ? message : title + "|" + message;
-	const size_t tag = text.find(Tag);
-	if(tag == std::string::npos) return false;
-	text = text.substr(tag + strlen(Tag));
+bool Weather::ingest(const std::string& title, const std::string& message, int8_t postedHour, int8_t postedMinute){
+	// Fields follow the tag if there is one (in the message, or in the title with the
+	// fields in the message), otherwise the message is just the fields
+	std::string text;
+	std::string upperMsg(message), upperTitle(title);
+	for(auto& c : upperMsg) c = (char) toupper((unsigned char) c);
+	for(auto& c : upperTitle) c = (char) toupper((unsigned char) c);
+	if(const size_t tag = upperMsg.find(Tag); tag != std::string::npos){
+		text = message.substr(tag + strlen(Tag));
+	}else if(const size_t tagT = upperTitle.find(Tag); tagT != std::string::npos){
+		text = title.substr(tagT + strlen(Tag)) + "|" + message;
+	}else{
+		text = message;
+	}
 
 	std::vector<std::string> fields;
 	size_t start = 0;
@@ -112,13 +147,24 @@ bool Weather::ingest(const std::string& title, const std::string& message){
 	const bool night = now.tm_hour < 7 || now.tm_hour >= 20;
 	d.icon = iconFor(d.condition, night);
 	d.updated = time ? time->getLocalEpoch() : 0;
+	if(time && postedHour >= 0 && postedMinute >= 0){
+		// Today at the posting time, or yesterday if that's in the future
+		const time_t now = d.updated;
+		time_t posted = now - (now % 86400) + postedHour * 3600 + postedMinute * 60;
+		if(posted > now + 60) posted -= 86400;
+		d.updated = posted;
+	}
 	d.valid = true;
 
 	{
 		std::lock_guard lock(mut);
+		if(data.valid && data.updated > d.updated) return true; // we already have something newer
 		data = d;
 	}
-	store();
+	if(storeTimer){
+		esp_timer_stop(storeTimer);
+		esp_timer_start_once(storeTimer, 2 * 1000 * 1000); // also coalesces bursts of re-sent updates
+	}
 
 	ESP_LOGI(TAG, "Weather: %d%c %s (H %d L %d)", d.temp, d.unit, d.condition, d.high, d.low);
 	Events::post(Facility::Weather, Event{ .action = Event::Updated });

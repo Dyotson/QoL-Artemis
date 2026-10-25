@@ -12,6 +12,7 @@
 LockScreen::LockScreen() : ts(*((Time*) Services.get(Service::Time))), phone(*((Phone*) Services.get(Service::Phone))), queue(24){
 	if(phone.getCall().category == Notif::Category::IncomingCall){
 		lv_async_call([](void* data){
+			if(CallScreen::isShown()) return;
 			auto scr = (LockScreen*) data;
 			scr->transition([](){ return std::make_unique<CallScreen>(); });
 		}, this);
@@ -154,6 +155,7 @@ void LockScreen::processEvt(const Phone::Event& evt){
 		auto notif = phone.getNotif(evt.data.addChgRem.id);
 		if(notif.category == Notif::Category::IncomingCall){
 			lv_async_call([](void* d){
+				if(CallScreen::isShown()) return;
 				auto scr = (LockScreen*) d;
 				scr->transition([](){ return std::make_unique<CallScreen>(); });
 			}, this);

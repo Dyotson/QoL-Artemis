@@ -60,6 +60,7 @@ private:
 	static constexpr uint64_t LostAlertMs = 60 * 1000;
 	esp_timer_handle_t lostTimer = nullptr;
 	void onPhoneLost();
+	void showCall();
 
 	esp_timer_handle_t alarmTimer = nullptr;
 	std::atomic<bool> alarmActive{ false };
