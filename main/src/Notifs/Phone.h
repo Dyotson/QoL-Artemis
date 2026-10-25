@@ -53,6 +53,11 @@ public:
 	void doPos(uint32_t id);
 	void doNeg(uint32_t id);
 
+	/** Removes every notification (except an incoming call), also from the iPhone */
+	void clearAll();
+	/** Testing: clearAll() only clears the watch, not the iPhone */
+	bool clearDryRun = false;
+
 	// Media controls
 	void doMediaPlay();
 	void doMediaPause();

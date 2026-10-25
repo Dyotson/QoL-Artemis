@@ -41,6 +41,18 @@ private:
 	lv_obj_t* date = nullptr;
 	class WeatherElement* weather = nullptr;
 
+	// "CLEAR ALL" row at the top of the notification list. Needs two presses: the first
+	// arms it ("PRESS AGAIN") for ClearArmMs.
+	lv_obj_t* clearAll = nullptr;
+	lv_obj_t* clearLabel = nullptr;
+	bool clearArmed = false;
+	uint64_t clearArmedAt = 0;
+	static constexpr uint64_t ClearArmMs = 3000;
+	void buildClearAll(const struct ThemeStruct& theme);
+	void updateClearAll();
+	void onClearAllClicked();
+	void disarmClearAll();
+
 	static constexpr uint8_t MaxNotifs = Phone::MaxNotifs;
 	std::unordered_map<uint32_t, Item*> notifs;
 

@@ -296,6 +296,12 @@ void DevConsole::registerBuiltins(){
 		printf("melody %s, screen %s\n", melody && melody->isPlaying() ? "playing" : "silent", sleep && sleep->isSleeping() ? "off" : "on");
 	});
 
+	addCommand("cleardry", "cleardry <on|off>  - 'clear all' only clears the watch (testing)", [](const Args& args){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(phone && args.size() > 1) phone->clearDryRun = args[1] == "on";
+		if(phone) printf("clear-all dry run: %s\n", phone->clearDryRun ? "on (iPhone untouched)" : "off");
+	});
+
 	addCommand("notifs", "list notifications on the watch (app, title, message)", [](const Args&){
 		auto phone = (Phone*) Services.get(Service::Phone);
 		if(!phone) return;

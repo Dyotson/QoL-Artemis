@@ -50,6 +50,8 @@ weather and world time.
   *Space Harrier* theme from the Japanese Sega Master System / Mark III BIOS until you
   answer, ignore or reject. (The stock firmware only reacted with the screen on, and just
   blinked the LEDs.)
+- **Clear all notifications** at once: scroll down from the watch face to **CLEAR ALL** and
+  press Select twice. They're cleared on the iPhone too (an incoming call is left alone).
 - **Quiet hours**: turn the switch on in Settings and set *Quiet from* / *Quiet until*; in that
   window notifications and calls don't beep, blink or wake the watch (a call still shows if
   you look at the watch). Alarms still ring.
@@ -70,6 +72,7 @@ a stock loop that woke the CPU every second all day now runs every 15 s.
   <img src="docs/screenshots/alert.png" width="192" alt="Timer ringing">
   <img src="docs/screenshots/sysinfo.png" width="192" alt="System info">
   <img src="docs/screenshots/settings.png" width="192" alt="New settings">
+  <img src="docs/screenshots/clearall.png" width="192" alt="Clear all notifications">
 </p>
 
 Weather on all nine themes:

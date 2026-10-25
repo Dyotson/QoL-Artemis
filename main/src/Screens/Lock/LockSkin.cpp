@@ -13,6 +13,7 @@
 #include "Screens/Lock/Elements/Theme8BatteryElement.h"
 #include "UIElements/NotifIconsElement.h"
 #include "Theme/theme.h"
+#include "Util/stdafx.h"
 #include "UIElements/WeatherElement.h"
 
 LockSkin::LockSkin(lv_obj_t* parent, lv_group_t* inputGroup) : LVObject(parent), inputGroup(inputGroup){
@@ -51,6 +52,10 @@ void LockSkin::loop(){
 	}
 
 	setDateLabel();
+
+	if(clearArmed && millis() - clearArmedAt > ClearArmMs){
+		disarmClearAll();
+	}
 }
 
 void LockSkin::prepare(){
@@ -134,6 +139,7 @@ void LockSkin::notifAdd(const Notif& notif){
 
 		auto focused = lv_group_get_focused(inputGroup);
 		lv_obj_move_to_index(*item, 0);
+		if(clearAll) lv_obj_move_to_index(clearAll, 0);
 		lv_group_remove_all_objs(inputGroup);
 		lv_group_add_obj(inputGroup, *media);
 		lv_group_add_obj(inputGroup, getMain());
@@ -152,6 +158,7 @@ void LockSkin::notifAdd(const Notif& notif){
 		notifs.insert(std::make_pair(notif.uid, item));
 
 		addNotifIcon(notifIcon(notif));
+		updateClearAll();
 	}
 
 	auto el = notifs[notif.uid];
@@ -173,11 +180,17 @@ void LockSkin::notifRem(uint32_t id){
 
 	lv_obj_del(*el);
 	notifs.erase(it);
+	updateClearAll();
 }
 
 void LockSkin::notifsClear(){
+	// Delete the notification rows only (the list also holds the "clear all" row)
+	auto items = notifs;
 	notifs.clear(); // This has to precede rest clearing
-	lv_obj_clean(notifList);
+	for(auto& [uid, item] : items){
+		lv_obj_del(*item);
+	}
+	updateClearAll();
 
 	if(icons == nullptr){
 		return;
@@ -359,6 +372,8 @@ void LockSkin::buildUI(){
 	lv_obj_set_style_pad_ver(notifList, 3, 0);
 	lv_obj_set_style_pad_gap(notifList, 3, 0);
 
+	buildClearAll(themeData);
+
 	// BG
 
 	lv_obj_set_style_bg_color(main, lv_color_black(), 0);
@@ -417,4 +432,95 @@ void LockSkin::setDateLabel(){
 								   (settings->get().dateFormat == DateFormat::Regular ? month : day) + " " + std::to_string(tm.tm_year + 1900);
 
 	lv_label_set_text(date, dateString.c_str());
+}
+
+void LockSkin::buildClearAll(const ThemeStruct& theme){
+	clearAll = lv_obj_create(notifList);
+	lv_obj_set_size(clearAll, lv_pct(100), LV_SIZE_CONTENT);
+	lv_obj_set_style_pad_ver(clearAll, 3, 0);
+	lv_obj_set_style_radius(clearAll, 3, 0);
+	lv_obj_set_style_border_width(clearAll, 1, 0);
+	lv_obj_set_style_border_color(clearAll, theme.primaryColor, 0);
+	lv_obj_set_style_border_opa(clearAll, LV_OPA_COVER, 0);
+	lv_obj_set_style_bg_color(clearAll, theme.primaryColor, LV_STATE_FOCUSED);
+	lv_obj_set_style_bg_opa(clearAll, LV_OPA_COVER, LV_STATE_FOCUSED);
+	lv_obj_add_flag(clearAll, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_add_flag(clearAll, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+	lv_obj_add_flag(clearAll, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+	lv_obj_clear_flag(clearAll, LV_OBJ_FLAG_SCROLLABLE);
+
+	clearLabel = lv_label_create(clearAll);
+	lv_obj_set_style_text_font(clearLabel, &landerfont, 0);
+	lv_obj_set_style_text_color(clearLabel, theme.highlightColor, 0);
+	lv_label_set_text(clearLabel, "CLEAR ALL");
+	lv_obj_center(clearLabel);
+
+	// Text colour flips with focus so it stays readable on the filled background
+	lv_obj_add_event_cb(clearAll, [](lv_event_t* e){
+		auto skin = static_cast<LockSkin*>(e->user_data);
+		auto settings = (Settings*) Services.get(Service::Settings);
+		const auto t = settings->get().themeData;
+		const bool focused = lv_event_get_code(e) == LV_EVENT_FOCUSED;
+		lv_obj_set_style_text_color(skin->clearLabel, focused ? t.backgroundColor : t.highlightColor, 0);
+		if(!focused) skin->disarmClearAll();
+	}, LV_EVENT_FOCUSED, this);
+	lv_obj_add_event_cb(clearAll, [](lv_event_t* e){
+		auto skin = static_cast<LockSkin*>(e->user_data);
+		auto settings = (Settings*) Services.get(Service::Settings);
+		lv_obj_set_style_text_color(skin->clearLabel, settings->get().themeData.highlightColor, 0);
+		skin->disarmClearAll();
+	}, LV_EVENT_DEFOCUSED, this);
+	lv_obj_add_event_cb(clearAll, [](lv_event_t* e){
+		static_cast<LockSkin*>(e->user_data)->onClearAllClicked();
+	}, LV_EVENT_CLICKED, this);
+
+	updateClearAll();
+}
+
+void LockSkin::updateClearAll(){
+	if(clearAll == nullptr) return;
+
+	if(notifs.empty()){
+		if(lv_group_get_focused(inputGroup) == clearAll){
+			lv_group_focus_obj(main);
+		}
+		lv_group_remove_obj(clearAll);
+		lv_obj_add_flag(clearAll, LV_OBJ_FLAG_HIDDEN);
+		disarmClearAll();
+	}else{
+		lv_obj_clear_flag(clearAll, LV_OBJ_FLAG_HIDDEN);
+		if(lv_obj_get_group(clearAll) == nullptr){
+			// Right after the face (and media) in the focus order
+			lv_group_remove_all_objs(inputGroup);
+			lv_group_add_obj(inputGroup, *media);
+			lv_group_add_obj(inputGroup, main);
+			for(int j = 0; j < lv_obj_get_child_cnt(notifList); ++j){
+				lv_group_add_obj(inputGroup, lv_obj_get_child(notifList, j));
+			}
+			lv_group_focus_obj(main);
+		}
+	}
+}
+
+void LockSkin::disarmClearAll(){
+	if(!clearArmed) return;
+	clearArmed = false;
+	if(clearLabel) lv_label_set_text(clearLabel, "CLEAR ALL");
+}
+
+void LockSkin::onClearAllClicked(){
+	if(!clearArmed){
+		clearArmed = true;
+		clearArmedAt = millis();
+		lv_label_set_text(clearLabel, "PRESS AGAIN");
+		return;
+	}
+
+	disarmClearAll();
+	lv_group_focus_obj(main);
+	lv_obj_scroll_to_view(main, LV_ANIM_ON);
+
+	if(auto phone = (Phone*) Services.get(Service::Phone)){
+		phone->clearAll(); // Removed events take the rows away
+	}
 }

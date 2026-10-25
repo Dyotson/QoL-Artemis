@@ -126,6 +126,46 @@ void Phone::doNeg(uint32_t id){
 	current->actionNeg(id);
 }
 
+void Phone::clearAll(){
+	std::vector<uint32_t> dismiss; // to clear on the phone too
+
+	{
+		std::lock_guard lock(mut);
+		for(auto it = notifs.begin(); it != notifs.end();){
+			if(it->category == Notif::Category::IncomingCall){
+				++it;
+				continue;
+			}
+			const uint32_t uid = it->uid;
+			if(current != nullptr && !stale.count(uid) && uid < debugUid0){
+				dismiss.push_back(uid);
+			}
+			it = notifs.erase(it);
+			stale.erase(uid);
+			Events::post(Facility::Phone, Event { .action = Event::Removed, .data = { .addChgRem = { .id = uid } } });
+		}
+	}
+
+	if(dismiss.empty() || current == nullptr || clearDryRun) return;
+
+	// One ANCS "negative action" (clear) per notification, spaced out on a short-lived task
+	// so a burst of writes doesn't pile up on the link
+	struct Job {
+		NotifSource* src;
+		std::vector<uint32_t> uids;
+	};
+	auto job = new Job{ current, std::move(dismiss) };
+	xTaskCreate([](void* arg){
+		auto job = (Job*) arg;
+		for(const uint32_t uid : job->uids){
+			job->src->actionNeg(uid);
+			vTaskDelay(pdMS_TO_TICKS(80));
+		}
+		delete job;
+		vTaskDelete(nullptr);
+	}, "NotifClear", 3 * 1024, job, 4, nullptr);
+}
+
 void Phone::doMediaPlay(){
 	if(mediaCurrent == nullptr) return;
 	mediaCurrent->mediaPlay();
