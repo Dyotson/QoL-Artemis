@@ -29,7 +29,7 @@ AlertScreen::AlertScreen() : queue(8), shownAt(millis()){
 	title = lv_label_create(*this);
 	lv_obj_set_style_text_font(title, &lv_font_unscii_16, 0);
 	lv_obj_set_style_text_color(title, color, 0);
-	lv_label_set_text(title, alert.type == Clocks::AlertType::Timer ? "TIME'S UP" : "ALARM");
+	lv_label_set_text(title, alert.type == Clocks::AlertType::Timer ? "TIMER" : "ALARM");
 
 	big = lv_label_create(*this);
 	lv_obj_set_style_text_font(big, &clockfont, 0);

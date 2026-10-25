@@ -10,6 +10,7 @@
 #include "Devices/IMU.h"
 #include "LV_Interface/LVModal.h"
 #include "TimePickerModal.h"
+#include <vector>
 
 class SettingsScreen : public LVScreen {
 public:
@@ -45,6 +46,7 @@ private:
 	BoolElement* rotationSwitch = nullptr;
 	BoolElement* timeFormatSwitch = nullptr;
 	LabelElement* loadingText;
+	std::vector<LVObject*> qolElements;
 
 	bool shouldTransition = false;
 

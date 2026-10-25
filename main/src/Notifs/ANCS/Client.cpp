@@ -71,7 +71,7 @@ void ANCS::Client::actionNeg(uint32_t uid){
 
 void ANCS::Client::loopNotif(){
 	if(chr.notif == nullptr || !connected){
-		delayMillis(1000);
+		delayMillis(5000); // not connected; nothing to do (long wait saves battery)
 		return;
 	}
 
@@ -153,7 +153,7 @@ void ANCS::Client::loopNotif(){
 
 void ANCS::Client::loopData(){
 	if(chr.data == nullptr || !connected){
-		delayMillis(1000);
+		delayMillis(5000); // not connected; nothing to do (long wait saves battery)
 		return;
 	}
 

@@ -221,7 +221,14 @@ void init(){
 
 	new DevConsole(*lvgl);
 
-	Services.set(Service::Clocks, new Clocks());
+	auto clocks = new Clocks();
+	Services.set(Service::Clocks, clocks);
+	DevConsole::addCommand("timer", "timer <seconds>  - start the countdown timer", [clocks](const DevConsole::Args& args){
+		if(args.size() < 2) return;
+		clocks->timerReset();
+		clocks->timerSet(atoi(args[1].c_str()));
+		clocks->timerStartPause();
+	});
 
 	FSLVGL::loadCache(settings->get().themeData.theme);
 

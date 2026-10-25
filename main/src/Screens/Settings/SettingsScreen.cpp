@@ -14,6 +14,7 @@
 #include "Filepaths.hpp"
 #include "LV_Interface/InputLVGL.h"
 #include "LV_Interface/FSLVGL.h"
+#include "Settings/ExtSettings.h"
 
 SettingsScreen::SettingsScreen() : settings(*(Settings*) Services.get(Service::Settings)), backlight(*(BacklightBrightness*) Services.get(Service::Backlight)),
 								   audio(*(ChirpSystem*) Services.get(Service::Audio)), imu(*(IMU*) Services.get(Service::IMU)),
@@ -52,6 +53,10 @@ void SettingsScreen::onStop(){
 	if(timePickerModal != nullptr){
 		delete timePickerModal;
 		timePickerModal = nullptr;
+	}
+
+	if(auto ext = (ExtSettings*) Services.get(Service::ExtSettings)){
+		ext->store();
 	}
 
 	auto savedSettings = settings.get();
@@ -174,6 +179,10 @@ void SettingsScreen::updateVisuals(){
 		saveAndExit->updateVisuals();
 	}
 
+	for(auto el : qolElements){
+		el->updateVisuals();
+	}
+
 	if(dateFormatPicker != nullptr){
 		dateFormatPicker->updateVisuals();
 	}
@@ -289,6 +298,33 @@ void SettingsScreen::buildUI(){
 		settings.set(s);
 	}, startingSettings.motionDetection);
 	lv_group_add_obj(inputGroup, *motionSwitch);
+
+	// ---- QoL settings (extended settings blob) ----
+	static const char* const Hours[24] = { "00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
+										   "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00" };
+	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+	const auto extStart = ext->get();
+	auto extUpdate = [ext](const std::function<void(ExtSettingsStruct&)>& fn){
+		auto e = ext->get();
+		fn(e);
+		ext->set(e);
+	};
+
+	auto quiet = new BoolElement(container, "Quiet hours", [extUpdate](bool v){ extUpdate([v](auto& e){ e.quietHours = v; }); }, extStart.quietHours);
+	lv_group_add_obj(inputGroup, *quiet);
+	auto quietFrom = new DiscreteSliderElement(container, "Quiet from", [extUpdate](uint8_t v){ extUpdate([v](auto& e){ e.quietStart = v; }); },
+											   std::vector<const char*>(Hours, Hours + 24), extStart.quietStart);
+	lv_group_add_obj(inputGroup, *quietFrom);
+	auto quietTo = new DiscreteSliderElement(container, "Quiet until", [extUpdate](uint8_t v){ extUpdate([v](auto& e){ e.quietEnd = v; }); },
+											 std::vector<const char*>(Hours, Hours + 24), extStart.quietEnd);
+	lv_group_add_obj(inputGroup, *quietTo);
+	auto lost = new BoolElement(container, "Phone lost alert", [extUpdate](bool v){ extUpdate([v](auto& e){ e.disconnectAlert = v; }); }, extStart.disconnectAlert);
+	lv_group_add_obj(inputGroup, *lost);
+	auto faceWx = new BoolElement(container, "Weather on face", [extUpdate](bool v){
+		extUpdate([v](auto& e){ e.complication = v ? FaceComplication::Weather : FaceComplication::None; });
+	}, extStart.complication == FaceComplication::Weather);
+	lv_group_add_obj(inputGroup, *faceWx);
+	qolElements = { quiet, quietFrom, quietTo, lost, faceWx };
 
 	rotationSwitch = new BoolElement(container, "Left-hand mode", [this](bool value){
 		auto s = settings.get();

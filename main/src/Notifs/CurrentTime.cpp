@@ -18,7 +18,7 @@ CurrentTime::CurrentTime(BLE::Client* client) : Threaded("CurrentTime", 3 * 1024
 
 void CurrentTime::loop(){
 	if(chr == nullptr || !chr->connected()){
-		delayMillis(1000);
+		delayMillis(5000); // not connected; nothing to do (long wait saves battery)
 		return;
 	}
 

@@ -78,7 +78,7 @@ void AMS::Client::registerEntities(){
 
 void AMS::Client::loopUpdate(){
 	if(chr.entityUpdate == nullptr || !connected){
-		delayMillis(1000);
+		delayMillis(5000); // not connected; nothing to do (long wait saves battery)
 		return;
 	}
 

@@ -63,7 +63,7 @@ void DevConsole::loop(){
 	}
 
 	if(!usb){
-		vTaskDelay(pdMS_TO_TICKS(2000));
+		vTaskDelay(pdMS_TO_TICKS(10000)); // unplugged: only the diagnostics tick
 		return;
 	}
 

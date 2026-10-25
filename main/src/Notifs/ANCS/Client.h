@@ -82,7 +82,10 @@ private:
 	bool abandonInFlight = false;
 
 	static constexpr size_t MaxQueued = 16;
-	static constexpr uint32_t IdlePollMs = 1000;          // loopData poll while Idle (only to pick up a newly-pumped request)
+	// loopData poll while Idle, only to pick up a newly-pumped request. Was 1 s, which woke
+	// the CPU every second all day while connected; DataSource replies and new requests'
+	// data wake the task anyway, so this only bounds stale-UID timeouts.
+	static constexpr uint32_t IdlePollMs = 15000;
 	static constexpr uint32_t PollMs = 250;               // loopData poll while a request is in flight (Awaiting)
 	static constexpr uint64_t RequestTimeoutMs = 3500;    // drop if no DataSource response arrives (e.g. a stale UID / 0xA2)
 	static constexpr uint32_t ProcessingTimeoutMs = 3500; // salvage if a notif stalls mid-parse

@@ -1,6 +1,7 @@
 #include "WeatherElement.h"
 #include "WeatherIcons.h"
 #include "Services/Weather.h"
+#include "Settings/ExtSettings.h"
 #include "Theme/theme.h"
 #include "Util/Services.h"
 #include "Util/stdafx.h"
@@ -34,7 +35,9 @@ WeatherElement::WeatherElement(lv_obj_t* parent, lv_color_t color) : LVObject(pa
 
 void WeatherElement::refresh(){
 	auto weather = (Weather*) Services.get(Service::Weather);
-	if(!weather || !weather->fresh()){
+	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+	const bool enabled = !ext || ext->get().complication == FaceComplication::Weather;
+	if(!weather || !weather->fresh() || !enabled){
 		lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
 		shownUpdate = -1;
 		return;
@@ -55,7 +58,9 @@ void WeatherElement::loop(){
 	if(!weather) return;
 	const auto d = weather->get();
 	const bool visible = !lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
-	if(d.updated != shownUpdate || visible != weather->fresh()){
+	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
+	const bool want = weather->fresh() && (!ext || ext->get().complication == FaceComplication::Weather);
+	if(d.updated != shownUpdate || visible != want){
 		refresh();
 	}
 }
