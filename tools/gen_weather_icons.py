@@ -182,7 +182,7 @@ SMALL = {
         "            ",
         "   #   #    ",
         "            ",
-        " #   #   #  "],
+        "            "],
     'Storm': [
         "    ###     ",
         "  ##   ##   ",
@@ -192,10 +192,10 @@ SMALL = {
         " ####  ###  ",
         "     ##     ",
         "    ##      ",
-        "   #####    ",
-        "     ##     ",
-        "    ##      ",
-        "    #       "],
+        "   ####     ",
+        "     #      ",
+        "    #       ",
+        "            "],
     'Wind': [
         "            ",
         "        ##  ",
@@ -226,6 +226,7 @@ SMALL = {
 
 
 def draw_small(name):
+    assert SMALL[name][11].strip() == '', f'{name}: keep the bottom row empty'
     im = Image.new('1', (12, 12), 0)
     px = im.load()
     for y, row in enumerate(SMALL[name]):

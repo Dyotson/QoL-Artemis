@@ -303,7 +303,7 @@ inline static ThemeStruct createTheme(Theme theme){
 			data.notifData.maxNotifs = 7;
 
 			data.weatherX = 58;
-			data.weatherY = 2;
+			data.weatherY = 4; // inside the top bar: its borders are at rows 3 and 16
 
 			break;
 		}
