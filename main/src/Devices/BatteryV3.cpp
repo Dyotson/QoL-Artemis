@@ -74,7 +74,8 @@ void BatteryV3::sample(bool fresh){
 		hysteresis.update(val);
 	}
 
-	if(oldLevel != getLevel() || fresh){
+	// Fresh samples happen every 6 s while the screen is off; only report actual changes then
+	if(oldLevel != getLevel() || (fresh && !isSleeping())){
 		Events::post(Facility::Battery, Battery::Event{ .action = Event::LevelChange, .level = getLevel() });
 	}
 

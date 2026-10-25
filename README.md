@@ -27,6 +27,10 @@ weather and world time.
   the link ~3× more chances to recover from your body blocking the signal before it drops.
 - **Notifications survive disconnects** instead of being wiped, and when the iPhone re-sends
   them on reconnect they don't all beep again. Only genuinely new notifications alert you.
+- **No more crashes after a few hours on the wrist.** The stock event system leaked a little
+  memory every time a listener's queue was full; with the screen off, battery updates queued
+  up for a listener that can't run until the screen wakes, so a few hours of sleep used up
+  the internal RAM — notifications stopped arriving, then the watch crashed.
 - **No more random reboots/shutdowns.** The Bluetooth host task had 128 bytes of stack left
   (and a UI input task 156) — one deep call and the watch rebooted. A single bad battery
   reading right after waking could power the watch off; it's now filtered and confirmed.
@@ -46,7 +50,9 @@ weather and world time.
   *Space Harrier* theme from the Japanese Sega Master System / Mark III BIOS until you
   answer, ignore or reject. (The stock firmware only reacted with the screen on, and just
   blinked the LEDs.)
-- **Quiet hours** (no notification beeps at night) and an optional **phone-lost alert**.
+- **Quiet hours**: turn the switch on in Settings and set *Quiet from* / *Quiet until*; in that
+  window notifications don't beep or blink. Calls and alarms still ring.
+- Optional **phone-lost alert**: beeps if the phone stays out of reach for a minute.
 - **System info**: battery, phone link, drops, crashes, time zone.
 
 ### Battery

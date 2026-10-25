@@ -6,6 +6,7 @@
 #include "Notifs/Phone.h"
 #include "Services/Time.h"
 #include "Services/Weather.h"
+#include "Devices/Battery.h"
 #include "Services/MelodyPlayer.h"
 #include "Pins.hpp"
 #include "Util/Events.h"
@@ -201,7 +202,7 @@ void DevConsole::registerBuiltins(){
 		}
 
 		const auto& log = diag->getBootLog();
-		printf("boots: %lu\n", log.bootCount);
+		printf("boots: %lu (before this boot: internal RAM free %lu, largest %lu)\n", log.bootCount, diag->prevHeapFree, diag->prevHeapLargest);
 		for(int i = 0; i < log.count; i++){
 			printf("  #%d %-22s prev uptime %lus\n", i, Diagnostics::reasonText(log.boots[i].reason), log.boots[i].prevUptime);
 		}
@@ -248,6 +249,16 @@ void DevConsole::registerBuiltins(){
 		if(!phone) return;
 		if(args.size() > 1 && args[1] == "end") phone->debugEndCall();
 		else phone->debugCall("Test caller");
+	});
+
+	addCommand("evtflood", "evtflood <n>  - post n battery events (leak test; run with the screen off)", [](const Args& args){
+		const int n = args.size() > 1 ? atoi(args[1].c_str()) : 1000;
+		auto bat = (Battery*) Services.get(Service::Battery);
+		const auto level = bat ? bat->getLevel() : Battery::Mid;
+		for(int i = 0; i < n; i++){
+			Events::post(Facility::Battery, Battery::Event{ .action = Battery::Event::LevelChange, .level = level });
+			if(i % 50 == 0) vTaskDelay(1);
+		}
 	});
 
 	addCommand("melody", "is a melody (ringtone/alarm) playing", [](const Args&){

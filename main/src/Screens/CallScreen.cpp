@@ -89,11 +89,11 @@ void CallScreen::onStart(){
 		sleep->enAutoSleep(false);
 	}
 
-	// Ringtone: the Space Harrier theme from the Japanese Master System BIOS, on loop
+	// Ringtone: the Space Harrier theme from the Japanese Master System BIOS, on loop.
+	// Calls ring during quiet hours too (those only silence notification beeps).
 	auto settings = (Settings*) Services.get(Service::Settings);
-	auto status = (StatusCenter*) Services.get(Service::Status);
 	auto melody = (MelodyPlayer*) Services.get(Service::Melody);
-	if(melody && settings->get().notificationSounds && !(status && status->inQuietHours())){
+	if(melody && settings->get().notificationSounds){
 		size_t n;
 		auto tone = MelodyPlayer::ringtone(n);
 		melody->play(tone, n, true);

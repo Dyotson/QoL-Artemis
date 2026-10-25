@@ -33,7 +33,12 @@ void Events::post(Facility facility, const void* data, size_t size){
 			qData = malloc(size);
 			memcpy(qData, data, size);
 		}
-		queue->post(facility, qData);
+		// A full queue drops the event; free its copy, or it leaks. (A listener that can't
+		// drain while the screen is off, e.g. SleepMan, used to leak every battery update
+		// until internal RAM ran out after a few hours on the wrist.)
+		if(!queue->post(facility, qData)){
+			free(qData);
+		}
 	}
 }
 

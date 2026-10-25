@@ -2,6 +2,7 @@
 #include "Util/stdafx.h"
 #include <esp_attr.h>
 #include <esp_core_dump.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <cstring>
 #include <cstdio>
@@ -13,9 +14,13 @@ static const char* TAG = "Diag";
 static constexpr uint32_t RtcMagic = 0xA27E3150;
 RTC_NOINIT_ATTR static uint32_t rtcMagic;
 RTC_NOINIT_ATTR static uint32_t rtcUptime;
+RTC_NOINIT_ATTR static uint32_t rtcHeapFree;
+RTC_NOINIT_ATTR static uint32_t rtcHeapLargest;
 
 Diagnostics::Diagnostics() : resetReason(esp_reset_reason()){
 	const uint32_t prevUptime = (rtcMagic == RtcMagic) ? rtcUptime : 0;
+	prevHeapFree = (rtcMagic == RtcMagic) ? rtcHeapFree : 0;
+	prevHeapLargest = (rtcMagic == RtcMagic) ? rtcHeapLargest : 0;
 	rtcMagic = RtcMagic;
 	rtcUptime = 0;
 
@@ -161,6 +166,8 @@ const char* Diagnostics::bleReasonText(uint8_t reason){
 
 void Diagnostics::tick(){
 	rtcUptime = (uint32_t) (millis() / 1000);
+	rtcHeapFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	rtcHeapLargest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 }
 
 void Diagnostics::setBootLogLevel(uint8_t level){

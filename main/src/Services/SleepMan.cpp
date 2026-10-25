@@ -127,6 +127,12 @@ void SleepMan::shutdown(){
 void SleepMan::loop(){
 	if(sleepRequested){
 		sleepRequested = false;
+		// Same as auto-sleep: if the watch is held up, wait for it to be lowered before a
+		// lift can wake it again (otherwise tilt-to-wake wakes it right away)
+		if(checkIMUTilt(IMU::TiltDirection::Lifted)){
+			waitForLower = true;
+			waitForLift = false;
+		}
 		goSleep();
 		return;
 	}

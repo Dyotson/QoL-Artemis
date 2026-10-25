@@ -45,6 +45,7 @@ protected:
 	virtual void sample(bool fresh = false) = 0;
 	virtual void onSleep(bool sleep) {}
 	void startTimer();
+	bool isSleeping() const { return sleep; }
 
 private:
 	static constexpr uint32_t ShortMeasureIntverval = 100;

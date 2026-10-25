@@ -64,6 +64,9 @@ public:
 	/** Log level applied at every boot (persists). For debugging via the dev console. */
 	void setBootLogLevel(uint8_t level);
 
+	/** Internal RAM free / largest block at the last tick before this boot (0 = unknown) */
+	uint32_t prevHeapFree = 0, prevHeapLargest = 0;
+
 	/** Called periodically so a later crash can report how long the watch had been running */
 	void tick();
 
