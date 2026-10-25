@@ -123,6 +123,15 @@ void StatusCenter::showCall(){
 	}
 }
 
+const char* StatusCenter::ledStateName() const{
+	switch(battState){
+		case Empty: return "low battery (red blink)";
+		case Charging: return "charging (orange)";
+		case Full: return "full (green)";
+		default: return "off";
+	}
+}
+
 bool StatusCenter::inQuietHours(){
 	auto ext = (ExtSettings*) Services.get(Service::ExtSettings);
 	auto time = (Time*) Services.get(Service::Time);
@@ -185,6 +194,12 @@ void StatusCenter::processBatt(const Battery::Event& evt){
 			battState = Full;
 		}else if(evt.chargeStatus == Battery::ChargingState::Charging){
 			battState = Charging;
+		}else{
+			// Unplugged: leave the charging/full light. (This used to rely on a battery level
+			// report following the unplug, which no longer comes while the screen is off.)
+			auto battery = (Battery*) Services.get(Service::Battery);
+			const auto level = battery ? battery->getLevel() : Battery::Mid;
+			battState = (level == Battery::VeryLow || level == Battery::Critical) ? Empty : Ok;
 		}
 	}else{
 		auto level = evt.level;

@@ -35,6 +35,9 @@ public:
 	void startAlarm();
 	void stopAlarm();
 
+	/** Battery LED state, for diagnostics */
+	const char* ledStateName() const;
+
 	/** Whether notification alerts are currently muted by quiet hours */
 	bool inQuietHours();
 

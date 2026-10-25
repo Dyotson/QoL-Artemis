@@ -278,6 +278,18 @@ void DevConsole::registerBuiltins(){
 			   status ? status->inQuietHours() : -1);
 	});
 
+	addCommand("charge", "charge [full|charging|unplugged]  - show / simulate the charging state for the LED", [](const Args& args){
+		auto status = (StatusCenter*) Services.get(Service::Status);
+		if(args.size() > 1){
+			Battery::ChargingState st = Battery::ChargingState::Unplugged;
+			if(args[1] == "full") st = Battery::ChargingState::Full;
+			else if(args[1] == "charging") st = Battery::ChargingState::Charging;
+			Events::post(Facility::Battery, Battery::Event{ .action = Battery::Event::Charging, .chargeStatus = st });
+			vTaskDelay(pdMS_TO_TICKS(200));
+		}
+		if(status) printf("battery LED: %s\n", status->ledStateName());
+	});
+
 	addCommand("melody", "is a melody (ringtone/alarm) playing", [](const Args&){
 		auto melody = (MelodyPlayer*) Services.get(Service::Melody);
 		auto sleep = (SleepMan*) Services.get(Service::Sleep);
