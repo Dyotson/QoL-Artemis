@@ -249,6 +249,7 @@ void BLE::Server::onConnect(const esp_ble_gatts_cb_param_t::gatts_connect_evt_pa
 
 	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
 		diag->onBleConnect();
+		diag->log(Diagnostics::Ev::LinkUp);
 	}
 
 	std::vector<ConnectCB> cbs;
@@ -284,6 +285,7 @@ void BLE::Server::onDisconnect(const esp_ble_gatts_cb_param_t::gatts_disconnect_
 
 	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
 		diag->onBleDisconnect(param->reason);
+		diag->log(Diagnostics::Ev::LinkDown, param->reason);
 	}
 
 	std::vector<DisconnectCB> cbs;

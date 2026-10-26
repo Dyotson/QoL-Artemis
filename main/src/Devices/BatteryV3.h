@@ -7,6 +7,7 @@
 #include "Periph/PinOut.h"
 #include <esp_efuse.h>
 #include <memory>
+#include <atomic>
 #include "Battery.h"
 
 class BatteryV3 : public Battery {
@@ -49,6 +50,9 @@ private:
 	std::unique_ptr<ADCReader> readerRef;
 	adc_cali_handle_t caliRef;
 	float lastCalibrationOffset = 0;
+
+	// Last percentage, for readers on other tasks: readerBatt gets rebuilt while asleep
+	std::atomic<uint8_t> cachedPerc{ 0 };
 
 	// The Critical level has to persist this long before the watch powers itself off,
 	// so a momentary voltage dip or bad ADC read doesn't shut it down.

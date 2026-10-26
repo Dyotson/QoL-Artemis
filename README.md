@@ -34,8 +34,10 @@ weather and world time.
 - **No more random reboots/shutdowns.** The Bluetooth host task had 128 bytes of stack left
   (and a UI input task 156) — one deep call and the watch rebooted. A single bad battery
   reading right after waking could power the watch off; it's now filtered and confirmed.
-- **Crash diagnostics.** Core dumps, reset history and Bluetooth link stats are recorded
-  (see *System info*), so if something does go wrong it can actually be tracked down.
+- **Crash diagnostics.** Core dumps, reset history, Bluetooth link stats and an event log
+  (link up/down, notifications and weather received, failures — with times, surviving
+  crashes) are recorded; scroll down in *System info* to see them, so if something does go
+  wrong it can actually be tracked down.
 
 ### Features
 - **Time & date sync from the iPhone**, including your time zone and daylight saving time.

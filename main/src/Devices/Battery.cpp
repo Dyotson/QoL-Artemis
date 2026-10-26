@@ -128,13 +128,15 @@ bool Battery::isShutdown() const{
 }
 
 void Battery::setSleep(bool sleep){
+	timer.stop();
+	std::lock_guard lock(mut);
+
+	// Under the lock: this rebuilds the ADC reader, which the Battery task may be using
+	// for a sample at this very moment (that race crashed the watch)
 	if(!sleep){
 		ESP_LOGI(TAG, "Battery reconfigure on wake\n");
 		inSleepReconfigure();
 	}
-
-	timer.stop();
-	std::lock_guard lock(mut);
 
 	onSleep(sleep);
 

@@ -1,6 +1,8 @@
 #include "Client.h"
 #include "GAP.h"
 #include "ConMan.h"
+#include "Services/Diagnostics.h"
+#include "Util/Services.h"
 #include <cstring>
 #include <esp_log.h>
 #include <esp_gap_ble_api.h>
@@ -147,6 +149,9 @@ void BLE::Client::onPairDone(){
 	// Link is now encrypted. Discovery proceeds once the connection is also open.
 	authOnLink = true;
 	con.paired = true;
+	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+		diag->log(Diagnostics::Ev::Encrypted);
+	}
 	if(encryptTimer) esp_timer_stop(encryptTimer);
 	maybeStartDiscovery();
 }
@@ -181,6 +186,9 @@ void BLE::Client::onEncryptTimeout(){
 
 	encryptRetries++;
 	ESP_LOGW(TAG, "Link not encrypted yet, requesting again (%d)", encryptRetries);
+	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+		diag->log(Diagnostics::Ev::EncRetry, encryptRetries);
+	}
 	esp_ble_set_encryption(con.addr, ESP_BLE_SEC_ENCRYPT_MITM);
 	esp_timer_start_once(encryptTimer, EncryptTimeoutUs);
 }
@@ -206,6 +214,9 @@ void BLE::Client::onDiscoveryTimeout(){
 
 	discoveryRetries++;
 	ESP_LOGW(TAG, "No services after discovery, searching again (%d)", discoveryRetries);
+	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+		diag->log(Diagnostics::Ev::DiscRetry, discoveryRetries);
+	}
 	searchServices();
 	esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
 }

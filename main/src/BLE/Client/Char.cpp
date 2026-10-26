@@ -1,5 +1,7 @@
 #include "../Client.h"
 #include <esp_log.h>
+#include "Services/Diagnostics.h"
+#include "Util/Services.h"
 
 static const char* TAG = "BLE::Client::Char";
 
@@ -87,6 +89,9 @@ void BLE::Client::Char::configDone(Char::Config config){
 void BLE::Client::Char::onRegNotify(const esp_ble_gattc_cb_param_t::gattc_reg_for_notify_evt_param* param){
 	if(param->status != ESP_GATT_OK){
 		ESP_LOGE(TAG, "reg for notify failed, error status = 0x%x", param->status);
+		if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+			diag->log(Diagnostics::Ev::RegFail, param->status);
+		}
 		return;
 	}
 

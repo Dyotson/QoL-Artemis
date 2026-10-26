@@ -3,6 +3,7 @@
 #include "Util/stdafx.h"
 #include "Util/Services.h"
 #include "Services/Weather.h"
+#include "Services/Diagnostics.h"
 #include <functional>
 #include <esp_log.h>
 
@@ -212,6 +213,7 @@ bool Phone::matchesStale(const Notif& notif){
 }
 
 void Phone::onConnect(NotifSource* src){
+	if(auto diag = (Diagnostics*) Services.get(Service::Diag)) diag->log(Diagnostics::Ev::AncsUp);
 	{
 		std::lock_guard lock(mut);
 		current = src;
@@ -237,6 +239,7 @@ void Phone::onConnect(NotifSource* src){
 
 void Phone::onDisconnect(NotifSource* src){
 	if(current != src) return;
+	if(auto diag = (Diagnostics*) Services.get(Service::Diag)) diag->log(Diagnostics::Ev::AncsDown);
 	Events::post(Facility::Phone, Event { .action = Event::Disconnected, .data = { .phoneType = getPhoneType() } });
 
 	std::lock_guard lock(mut);
@@ -308,6 +311,7 @@ bool Phone::consumeWeather(const Notif& notif){
 	if(auto weather = (Weather*) Services.get(Service::Weather)){
 		weather->ingest(notif.title, notif.message, notif.hour, notif.minute);
 	}
+	if(auto diag = (Diagnostics*) Services.get(Service::Diag)) diag->log(Diagnostics::Ev::WeatherRx);
 
 	// It was only a carrier for the data: clear it from the iPhone's notification center
 	if(current != nullptr && notif.uid < debugUid0){
@@ -319,6 +323,9 @@ bool Phone::consumeWeather(const Notif& notif){
 void Phone::onAdd(Notif notif){
 	if(notif.title.empty() && notif.message.empty()) return;
 	if(consumeWeather(notif)) return;
+	if(notif.uid < debugUid0 && !notif.preExisting){
+		if(auto diag = (Diagnostics*) Services.get(Service::Diag)) diag->log(Diagnostics::Ev::NotifRx);
+	}
 
 	std::lock_guard lock(mut);
 

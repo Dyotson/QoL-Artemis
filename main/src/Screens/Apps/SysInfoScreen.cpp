@@ -10,6 +10,8 @@
 #include <esp_heap_caps.h>
 #include <cstdio>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 SysInfoScreen::SysInfoScreen() : AppScreen("SYSTEM INFO"){
 	list = lv_obj_create(content);
@@ -33,7 +35,6 @@ static std::string ago(uint64_t ms){
 
 void SysInfoScreen::refresh(){
 	lastRefresh = millis();
-	const lv_coord_t scroll = lv_obj_get_scroll_y(list);
 	lv_obj_clean(list);
 
 	auto line = [this](const char* key, const std::string& value){
@@ -96,13 +97,53 @@ void SysInfoScreen::refresh(){
 	snprintf(buf, sizeof(buf), "%uk ram, %uk psram", heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024, heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
 	line("FREE", buf);
 
+	// Latest entries of the event log, newest first
+	if(diag){
+		std::vector<std::string> events;
+		diag->forEachEvent([&events](uint32_t t, Diagnostics::Ev type, uint16_t arg){
+			time_t tt = t;
+			tm lt;
+			gmtime_r(&tt, &lt);
+			char e[48];
+			if(type == Diagnostics::Ev::NotifRx || type == Diagnostics::Ev::WeatherRx){
+				snprintf(e, sizeof(e), "%s x%u", Diagnostics::evName(type), arg);
+			}else if(type == Diagnostics::Ev::LinkDown){
+				snprintf(e, sizeof(e), "%s, %s", Diagnostics::evName(type), Diagnostics::bleReasonText(arg));
+			}else if(type == Diagnostics::Ev::Boot){
+				snprintf(e, sizeof(e), "boot, %s", Diagnostics::reasonText(arg));
+			}else{
+				snprintf(e, sizeof(e), "%s", Diagnostics::evName(type));
+			}
+			char row[64];
+			snprintf(row, sizeof(row), "%02d:%02d|%s", lt.tm_hour, lt.tm_min, e);
+			events.push_back(row);
+		});
+		const int shown = std::min<int>(events.size(), 12);
+		for(int i = 0; i < shown; i++){
+			const auto& r = events[events.size() - 1 - i];
+			const size_t bar = r.find('|');
+			line(i == 0 ? r.substr(0, bar).c_str() : r.substr(0, bar).c_str(), r.substr(bar + 1));
+		}
+	}
+
+	applyScroll();
+}
+
+void SysInfoScreen::applyScroll(){
+	// The list is rebuilt every refresh, so the position is kept here and reapplied
 	lv_obj_update_layout(list);
-	lv_obj_scroll_to_y(list, scroll, LV_ANIM_OFF);
+	lv_obj_scroll_to_y(list, 0, LV_ANIM_OFF);
+	const lv_coord_t max = lv_obj_get_scroll_bottom(list);
+	if(scrollY > max) scrollY = max;
+	if(scrollY < 0) scrollY = 0;
+	lv_obj_scroll_to_y(list, scrollY, LV_ANIM_OFF);
 }
 
 void SysInfoScreen::onPress(Input::Button btn){
-	if(btn == Input::Up) lv_obj_scroll_by_bounded(list, 0, 20, LV_ANIM_ON);
-	else if(btn == Input::Down) lv_obj_scroll_by_bounded(list, 0, -20, LV_ANIM_ON);
+	if(btn == Input::Up) scrollY -= 24;
+	else if(btn == Input::Down) scrollY += 24;
+	else return;
+	applyScroll();
 }
 
 void SysInfoScreen::onRepeat(Input::Button btn){

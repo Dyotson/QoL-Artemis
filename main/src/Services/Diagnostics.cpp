@@ -1,5 +1,7 @@
 #include "Diagnostics.h"
 #include "Util/stdafx.h"
+#include "Util/Services.h"
+#include "Services/Time.h"
 #include <esp_attr.h>
 #include <esp_core_dump.h>
 #include <esp_heap_caps.h>
@@ -16,6 +18,19 @@ RTC_NOINIT_ATTR static uint32_t rtcMagic;
 RTC_NOINIT_ATTR static uint32_t rtcUptime;
 RTC_NOINIT_ATTR static uint32_t rtcHeapFree;
 RTC_NOINIT_ATTR static uint32_t rtcHeapLargest;
+
+struct LogEntry {
+	uint32_t time;	// local epoch seconds
+	uint8_t type;
+	uint8_t reserved;
+	uint16_t arg;
+};
+static constexpr uint32_t LogMagic = 0x4C4F4731;
+static constexpr size_t LogSize = 96;
+RTC_NOINIT_ATTR static uint32_t rtcLogMagic;
+RTC_NOINIT_ATTR static uint32_t rtcLogHead;	// next write index
+RTC_NOINIT_ATTR static uint32_t rtcLogCount;
+RTC_NOINIT_ATTR static LogEntry rtcLog[LogSize];
 
 Diagnostics::Diagnostics() : resetReason(esp_reset_reason()){
 	const uint32_t prevUptime = (rtcMagic == RtcMagic) ? rtcUptime : 0;
@@ -45,6 +60,11 @@ Diagnostics::Diagnostics() : resetReason(esp_reset_reason()){
 	uint8_t logLevel;
 	if(nvs_get_u8(handle, "logLevel", &logLevel) == ESP_OK && logLevel <= ESP_LOG_VERBOSE){
 		esp_log_level_set("*", (esp_log_level_t) logLevel);
+	}
+
+	if(rtcLogMagic != LogMagic || rtcLogHead >= LogSize || rtcLogCount > LogSize){
+		rtcLogMagic = LogMagic;
+		rtcLogHead = rtcLogCount = 0;
 	}
 
 	printf("Boot #%lu, reset reason: %s, previous uptime: %lus\n", bootLog.bootCount, reasonText(resetReason), prevUptime);
@@ -173,4 +193,56 @@ void Diagnostics::tick(){
 void Diagnostics::setBootLogLevel(uint8_t level){
 	nvs_set_u8(handle, "logLevel", level);
 	nvs_commit(handle);
+}
+
+static uint32_t nowLocal(){
+	auto time = (Time*) Services.get(Service::Time);
+	return time ? (uint32_t) time->getLocalEpoch() : (uint32_t) (millis() / 1000);
+}
+
+void Diagnostics::log(Ev type, uint16_t arg){
+	std::lock_guard lock(logMut);
+	const uint32_t now = nowLocal();
+
+	// Fold bursts: consecutive notification/weather arrivals within 15 min become one entry with a count
+	if((type == Ev::NotifRx || type == Ev::WeatherRx) && rtcLogCount > 0){
+		auto& last = rtcLog[(rtcLogHead + LogSize - 1) % LogSize];
+		if(last.type == (uint8_t) type && now - last.time < 15 * 60){
+			if(last.arg < 0xffff) last.arg++;
+			return;
+		}
+		arg = 1;
+	}
+
+	rtcLog[rtcLogHead] = { .time = now, .type = (uint8_t) type, .reserved = 0, .arg = arg };
+	rtcLogHead = (rtcLogHead + 1) % LogSize;
+	if(rtcLogCount < LogSize) rtcLogCount++;
+}
+
+void Diagnostics::forEachEvent(const std::function<void(uint32_t, Ev, uint16_t)>& fn) const{
+	std::lock_guard lock(logMut);
+	const size_t start = (rtcLogHead + LogSize - rtcLogCount) % LogSize;
+	for(size_t i = 0; i < rtcLogCount; i++){
+		const auto& e = rtcLog[(start + i) % LogSize];
+		fn(e.time, (Ev) e.type, e.arg);
+	}
+}
+
+const char* Diagnostics::evName(Ev type){
+	switch(type){
+		case Ev::Boot: return "boot";
+		case Ev::LinkUp: return "link up";
+		case Ev::LinkDown: return "link down";
+		case Ev::Encrypted: return "encrypted";
+		case Ev::AncsUp: return "notifications ready";
+		case Ev::AncsDown: return "notifications lost";
+		case Ev::NotifRx: return "notifications received";
+		case Ev::WeatherRx: return "weather received";
+		case Ev::RegFail: return "SUBSCRIBE FAILED";
+		case Ev::DiscRetry: return "discovery retry";
+		case Ev::EncRetry: return "encryption retry";
+		case Ev::Sleep: return "screen off";
+		case Ev::Wake: return "screen on";
+		default: return "?";
+	}
 }

@@ -18,6 +18,7 @@ BatteryV3::BatteryV3(ADC& adc) : adc(adc), refSwitch(Pins::get(Pin::BattVref)), 
 	calibrate();
 
 	readerBatt->resetEma();
+	cachedPerc = (uint8_t) readerBatt->getValue();
 	if(readerBatt->getValue() <= 1.f){
 		auto sleepMan = (SleepMan*)Services.get(Service::Sleep);
 		sleepMan->shutdown();
@@ -69,9 +70,11 @@ void BatteryV3::sample(bool fresh){
 		readerBatt->resetEma();
 		const float val = readerBatt->getValue();
 		hysteresis.reset(val);
+		cachedPerc = (uint8_t) val;
 	}else{
 		const float val = readerBatt->sample();
 		hysteresis.update(val);
+		cachedPerc = (uint8_t) val;
 	}
 
 	// Fresh samples happen every 6 s while the screen is off; only report actual changes then
@@ -103,7 +106,7 @@ void BatteryV3::onSleep(bool sleep) {
 }
 
 uint8_t BatteryV3::getPerc() const{
-	return readerBatt->getValue();
+	return cachedPerc;
 }
 
 Battery::Level BatteryV3::getLevel() const{

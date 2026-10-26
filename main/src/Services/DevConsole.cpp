@@ -216,6 +216,22 @@ void DevConsole::registerBuiltins(){
 		printf("coredump: %s\n", diag->hasCoredump() ? diag->coredumpSummary().c_str() : "none");
 	});
 
+	addCommand("events", "event log (survives crashes): link, notifications, weather, failures", [](const Args&){
+		auto diag = (Diagnostics*) Services.get(Service::Diag);
+		if(!diag) return;
+		diag->forEachEvent([](uint32_t t, Diagnostics::Ev type, uint16_t arg){
+			time_t tt = t;
+			tm lt;
+			gmtime_r(&tt, &lt);
+			char extra[48] = "";
+			if(type == Diagnostics::Ev::Boot) snprintf(extra, sizeof(extra), " (%s)", Diagnostics::reasonText(arg));
+			else if(type == Diagnostics::Ev::LinkDown) snprintf(extra, sizeof(extra), " (0x%02x %s)", arg, Diagnostics::bleReasonText(arg));
+			else if(type == Diagnostics::Ev::NotifRx || type == Diagnostics::Ev::WeatherRx) snprintf(extra, sizeof(extra), " x%u", arg);
+			else if(arg) snprintf(extra, sizeof(extra), " (%u)", arg);
+			printf("%02d-%02d %02d:%02d  %s%s\n", lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, Diagnostics::evName(type), extra);
+		});
+	});
+
 	addCommand("log", "log <tag|*> <0-5>  - set log level", [](const Args& args){
 		if(args.size() < 3) return;
 		esp_log_level_set(args[1].c_str(), (esp_log_level_t) atoi(args[2].c_str()));

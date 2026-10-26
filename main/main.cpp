@@ -47,6 +47,14 @@
 #include "Services/MelodyPlayer.h"
 #include "Services/Clocks.h"
 #include "Services/Weather.h"
+#include "Screens/MainMenu/MainMenu.h"
+#include "Screens/Settings/SettingsScreen.h"
+#include "Screens/Apps/WeatherScreen.h"
+#include "Screens/Apps/WorldClockScreen.h"
+#include "Screens/Apps/StopwatchScreen.h"
+#include "Screens/Apps/TimerScreen.h"
+#include "Screens/Apps/AlarmsScreen.h"
+#include "Screens/Apps/SysInfoScreen.h"
 
 LVGL* lvgl;
 BacklightBrightness* bl;
@@ -181,6 +189,7 @@ void init(){
 	auto rtc = new RTC(*i2c);
 	auto time = new Time(*rtc);
 	Services.set(Service::Time, time); // Time service is required as soon as Phone is up
+	diag->log(Diagnostics::Ev::Boot, diag->getResetReason());
 
 	Services.set(Service::Weather, new Weather());
 
@@ -207,6 +216,25 @@ void init(){
 			lvgl->startScreen([](){ return std::make_unique<LockScreen>(); });
 		});
 		vTaskDelay(pdMS_TO_TICKS(1500));
+	});
+
+	DevConsole::addCommand("open", "open <lock|menu|weather|world|stopwatch|timer|alarms|sysinfo|settings>  - jump to a screen", [](const DevConsole::Args& args){
+		if(args.size() < 2) return;
+		const std::string n = args[1];
+		std::function<std::unique_ptr<LVScreen>()> make;
+		if(n == "lock") make = [](){ return std::make_unique<LockScreen>(); };
+		else if(n == "menu") make = [](){ return std::make_unique<MainMenu>(); };
+		else if(n == "weather") make = [](){ return std::make_unique<WeatherScreen>(); };
+		else if(n == "world") make = [](){ return std::make_unique<WorldClockScreen>(); };
+		else if(n == "stopwatch") make = [](){ return std::make_unique<StopwatchScreen>(); };
+		else if(n == "timer") make = [](){ return std::make_unique<TimerScreen>(); };
+		else if(n == "alarms") make = [](){ return std::make_unique<AlarmsScreen>(); };
+		else if(n == "sysinfo") make = [](){ return std::make_unique<SysInfoScreen>(); };
+		else if(n == "settings") make = [](){ return std::make_unique<SettingsScreen>(); };
+		else{ printf("ERR unknown screen\n"); return; }
+		if(auto sleep = (SleepMan*) Services.get(Service::Sleep)) sleep->wake(true);
+		lvgl->runOnUI([make](){ lvgl->startScreen(make); });
+		vTaskDelay(pdMS_TO_TICKS(800));
 	});
 
 	DevConsole::addCommand("phone", "phone link / notification service state", [phone, client](const DevConsole::Args&){

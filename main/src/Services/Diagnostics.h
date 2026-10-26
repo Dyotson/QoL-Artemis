@@ -6,6 +6,8 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <functional>
+#include <mutex>
 
 /**
  * Keeps track of why the watch restarted and how the phone link behaves, so that
@@ -61,6 +63,16 @@ public:
 
 	static const char* bleReasonText(uint8_t reason);
 
+	/**
+	 * Small event log that survives crashes (RTC memory), stamped with local time, for
+	 * diagnosing intermittent problems after the fact ("notifications stopped at 13:00").
+	 */
+	enum class Ev : uint8_t { Boot, LinkUp, LinkDown, Encrypted, AncsUp, AncsDown, NotifRx, WeatherRx, RegFail, DiscRetry, EncRetry, Sleep, Wake };
+	void log(Ev type, uint16_t arg = 0);
+	/** Calls fn(localEpochSeconds, type, arg) oldest first */
+	void forEachEvent(const std::function<void(uint32_t, Ev, uint16_t)>& fn) const;
+	static const char* evName(Ev type);
+
 	/** Log level applied at every boot (persists). For debugging via the dev console. */
 	void setBootLogLevel(uint8_t level);
 
@@ -82,6 +94,8 @@ private:
 	std::atomic<uint64_t> lastConnectMs{ 0 };
 	std::atomic<bool> connected{ false };
 	std::atomic<uint16_t> connInterval{ 0 }, connLatency{ 0 }, connTimeout{ 0 };
+
+	mutable std::mutex logMut;
 
 	static constexpr const char* NVSNamespace = "ArtemisDiag";
 	static constexpr const char* BlobName = "BootLog";
