@@ -93,8 +93,10 @@ private:
 
 	// Watchdogs: if the link isn't encrypted, or no registered service got set up, shortly
 	// after connecting, ask again (a few times).
-	static constexpr uint64_t DiscoveryTimeoutUs = 10ULL * 1000 * 1000;
-	static constexpr uint8_t MaxRetries = 3;
+	static constexpr uint64_t DiscoveryTimeoutUs = 5ULL * 1000 * 1000;	// first check / retry backoff base
+	static constexpr uint64_t FirstSearchDelayUs = 1200ULL * 1000;
+	static constexpr uint8_t MaxRetries = 3;	// encryption re-requests
+	bool searchPending = false;
 	esp_timer_handle_t discoveryTimer = nullptr;
 
 	// iOS may encrypt the link before ESP_GATTC_CONNECT_EVT arrives. Remember that the

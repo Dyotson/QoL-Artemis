@@ -111,7 +111,10 @@ void BLE::GAP::ble_GAP_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* 
 
 		case ESP_GAP_BLE_AUTH_CMPL_EVT:{
 			if(!param->ble_security.auth_cmpl.success){
-				ESP_LOGI(TAG, "fail reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+				ESP_LOGW(TAG, "pairing/encryption failed, reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+				if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+					diag->log(Diagnostics::Ev::AuthFail, param->ble_security.auth_cmpl.fail_reason);
+				}
 				break;
 			}
 			uint64_t addr = 0;

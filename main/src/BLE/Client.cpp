@@ -4,6 +4,7 @@
 #include "Services/Diagnostics.h"
 #include "Util/Services.h"
 #include <cstring>
+#include <algorithm>
 #include <esp_log.h>
 #include <esp_gap_ble_api.h>
 
@@ -196,29 +197,42 @@ void BLE::Client::onEncryptTimeout(){
 void BLE::Client::onDiscoveryTimeout(){
 	if(!con || !con.discovering) return;
 
-	for(const auto& svc : services){
-		if(svc->populated()){
-			// Discovery went through; setup traffic is over, back to normal link parameters
-			ConMan.setBoost(false);
-			return;
-		}
+	if(searchPending){
+		searchPending = false;
+		searchServices();
+		esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
+		return;
 	}
 
-	// Not dropping the link here on purpose: iOS backs off from reconnecting to an
-	// accessory that keeps closing the connection, which is worse than retrying.
-	if((recoveryAllowed && !recoveryAllowed()) || discoveryRetries >= MaxRetries){
+	// Done only when every registered service is set up: with just the clock service up
+	// and not the notification service, the watch would sit there without notifications.
+	bool complete = true;
+	for(const auto& svc : services){
+		if(!svc->populated()) complete = false;
+	}
+	if(complete){
+		// Setup traffic is over, back to normal link parameters
+		ConMan.setBoost(false);
+		return;
+	}
+
+	if(recoveryAllowed && !recoveryAllowed()){
 		// e.g. an Android phone: it talks to our GATT server and has none of these services
 		ConMan.setBoost(false);
 		return;
 	}
 
-	discoveryRetries++;
-	ESP_LOGW(TAG, "No services after discovery, searching again (%d)", discoveryRetries);
+	// Keep trying for as long as the link is up, backing off (5 s, 10 s, 20 s, ... 60 s).
+	// Not dropping the link on purpose: iOS backs off from reconnecting to an accessory that
+	// keeps closing the connection, which is worse than retrying.
+	if(discoveryRetries < 0xff) discoveryRetries++;
+	ESP_LOGW(TAG, "Services not all set up, searching again (%d)", discoveryRetries);
 	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
 		diag->log(Diagnostics::Ev::DiscRetry, discoveryRetries);
 	}
 	searchServices();
-	esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
+	const uint64_t backoff = std::min<uint64_t>(DiscoveryTimeoutUs << std::min<int>(discoveryRetries - 1, 4), 60ULL * 1000 * 1000);
+	esp_timer_start_once(discoveryTimer, backoff);
 }
 
 void BLE::Client::maybeStartDiscovery(){
@@ -231,16 +245,23 @@ void BLE::Client::maybeStartDiscovery(){
 	con.discovering = true;
 
 	discoveryRetries = 0;
-	if(discoveryTimer){
-		esp_timer_stop(discoveryTimer);
-		esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
-	}
 
 	// No MTU request of our own: the ATT MTU is shared by both directions of the link and
 	// iOS always negotiates it as soon as it connects. When the phone got there first, our
 	// request was never answered, and every discovery request queued up behind it - the
 	// link stayed up while ANCS was never found.
-	searchServices();
+	//
+	// The search itself starts a moment later: right after encryption the iPhone is still
+	// busy with its own setup traffic (MTU, discovering our server) and an immediate search
+	// often failed, costing a full retry cycle.
+	searchPending = true;
+	if(discoveryTimer){
+		esp_timer_stop(discoveryTimer);
+		esp_timer_start_once(discoveryTimer, FirstSearchDelayUs);
+	}else{
+		searchPending = false;
+		searchServices();
+	}
 }
 
 void BLE::Client::onMtuResp(const esp_ble_gattc_cb_param_t::gattc_cfg_mtu_evt_param* param){
@@ -265,6 +286,7 @@ void BLE::Client::searchServices(){
 
 void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_res_evt_param* param){
 	for(const auto& service : services){
+		if(service->populated()) continue; // already set up by an earlier search (retries search everything)
 		if(param->srvc_id.uuid.len == service->uuid.len && memcmp(param->srvc_id.uuid.uuid.uuid128, service->uuid.uuid.uuid128, service->uuid.len) == 0){
 			service->establish(std::make_unique<ServiceInfo>(this, param->start_handle, param->end_handle));
 		}
@@ -274,6 +296,9 @@ void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_re
 void BLE::Client::onSearchComplete(const esp_ble_gattc_cb_param_t::gattc_search_cmpl_evt_param* param){
 	if(param->status != ESP_GATT_OK){
 		ESP_LOGE(TAG, "search service failed, error status = %x", param->status);
+		if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+			diag->log(Diagnostics::Ev::SearchFail, param->status);
+		}
 		return;
 	}
 
@@ -364,6 +389,7 @@ void BLE::Client::close(){
 	con.opened = false;
 	con.paired = false;
 	con.discovering = false;
+	searchPending = false;
 	memset(con.addr, 0, 6);
 
 	// Server notifies ConMan, which in turn starts advertising

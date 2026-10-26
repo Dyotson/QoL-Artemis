@@ -5,6 +5,7 @@
 #include "Util/Services.h"
 #include <esp_log.h>
 #include <esp_gatts_api.h>
+#include <esp_gap_ble_api.h>
 #include <algorithm>
 #include <cstring>
 
@@ -249,7 +250,7 @@ void BLE::Server::onConnect(const esp_ble_gatts_cb_param_t::gatts_connect_evt_pa
 
 	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
 		diag->onBleConnect();
-		diag->log(Diagnostics::Ev::LinkUp);
+		diag->log(Diagnostics::Ev::LinkUp, esp_ble_get_bond_device_num()); // 0 = the watch lost its pairing
 	}
 
 	std::vector<ConnectCB> cbs;

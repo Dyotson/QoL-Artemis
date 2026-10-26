@@ -109,6 +109,10 @@ void SysInfoScreen::refresh(){
 				snprintf(e, sizeof(e), "%s x%u", Diagnostics::evName(type), arg);
 			}else if(type == Diagnostics::Ev::LinkDown){
 				snprintf(e, sizeof(e), "%s, %s", Diagnostics::evName(type), Diagnostics::bleReasonText(arg));
+			}else if(type == Diagnostics::Ev::AuthFail){
+				snprintf(e, sizeof(e), "pairing failed 0x%02x", arg);
+			}else if(type == Diagnostics::Ev::LinkUp && arg == 0){
+				snprintf(e, sizeof(e), "link up, NOT PAIRED");
 			}else if(type == Diagnostics::Ev::Boot){
 				snprintf(e, sizeof(e), "boot, %s", Diagnostics::reasonText(arg));
 			}else{

@@ -243,6 +243,8 @@ const char* Diagnostics::evName(Ev type){
 		case Ev::EncRetry: return "encryption retry";
 		case Ev::Sleep: return "screen off";
 		case Ev::Wake: return "screen on";
+		case Ev::SearchFail: return "discovery failed";
+		case Ev::AuthFail: return "PAIRING/ENCRYPTION FAILED";
 		default: return "?";
 	}
 }

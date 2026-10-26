@@ -67,7 +67,7 @@ public:
 	 * Small event log that survives crashes (RTC memory), stamped with local time, for
 	 * diagnosing intermittent problems after the fact ("notifications stopped at 13:00").
 	 */
-	enum class Ev : uint8_t { Boot, LinkUp, LinkDown, Encrypted, AncsUp, AncsDown, NotifRx, WeatherRx, RegFail, DiscRetry, EncRetry, Sleep, Wake };
+	enum class Ev : uint8_t { Boot, LinkUp, LinkDown, Encrypted, AncsUp, AncsDown, NotifRx, WeatherRx, RegFail, DiscRetry, EncRetry, Sleep, Wake, SearchFail, AuthFail };
 	void log(Ev type, uint16_t arg = 0);
 	/** Calls fn(localEpochSeconds, type, arg) oldest first */
 	void forEachEvent(const std::function<void(uint32_t, Ev, uint16_t)>& fn) const;

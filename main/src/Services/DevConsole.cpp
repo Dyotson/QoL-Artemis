@@ -226,6 +226,8 @@ void DevConsole::registerBuiltins(){
 			char extra[48] = "";
 			if(type == Diagnostics::Ev::Boot) snprintf(extra, sizeof(extra), " (%s)", Diagnostics::reasonText(arg));
 			else if(type == Diagnostics::Ev::LinkDown) snprintf(extra, sizeof(extra), " (0x%02x %s)", arg, Diagnostics::bleReasonText(arg));
+			else if(type == Diagnostics::Ev::LinkUp) snprintf(extra, sizeof(extra), " (pairings stored: %u)", arg);
+			else if(type == Diagnostics::Ev::AuthFail) snprintf(extra, sizeof(extra), " (reason 0x%02x)", arg);
 			else if(type == Diagnostics::Ev::NotifRx || type == Diagnostics::Ev::WeatherRx) snprintf(extra, sizeof(extra), " x%u", arg);
 			else if(arg) snprintf(extra, sizeof(extra), " (%u)", arg);
 			printf("%02d-%02d %02d:%02d  %s%s\n", lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, Diagnostics::evName(type), extra);
