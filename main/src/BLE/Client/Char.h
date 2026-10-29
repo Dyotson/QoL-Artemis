@@ -29,6 +29,14 @@ public:
 
 	void read();
 
+	using DescrReadCB = std::function<void(esp_gatt_status_t status, const uint8_t* value, uint16_t len)>;
+
+	/**
+	 * Reads one of this characteristic's descriptors, e.g. the CCCD to check the phone still
+	 * has us subscribed. cb runs on the BT task. Returns whether the read was issued.
+	 */
+	bool readDescr(uint16_t uuid, DescrReadCB cb);
+
 private:
 	friend BLE::Client;
 	friend BLE::Client::Service;
@@ -56,6 +64,11 @@ private:
 	void onNotify(const esp_ble_gattc_cb_param_t::gattc_notify_evt_param* param);
 	void onRegNotify(const esp_ble_gattc_cb_param_t::gattc_reg_for_notify_evt_param* param);
 	void onWriteResp(esp_gattc_cb_event_t evt, const esp_ble_gattc_cb_param_t::gattc_write_evt_param* param);
+
+	// Descriptor read in progress: its handle routes ESP_GATTC_READ_DESCR_EVT back here
+	std::atomic<uint16_t> descrReadHndl{ 0 };
+	DescrReadCB descrReadCB;
+	void onDescrRead(const esp_ble_gattc_cb_param_t::gattc_read_char_evt_param* param);
 
 };
 

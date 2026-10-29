@@ -38,6 +38,22 @@ void BLE::Client::CharInfo::writeDescr(esp_bt_uuid_t uuid, uint8_t* data, size_t
 	esp_ble_gattc_write_char_descr(client->iface.hndl, client->con.hndl, descr.handle, len, data, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
 }
 
+uint16_t BLE::Client::CharInfo::getDescrHandle(esp_bt_uuid_t uuid) const{
+	esp_gattc_descr_elem_t descr;
+	uint16_t count = 1;
+	auto ret = esp_ble_gattc_get_descr_by_char_handle(client->iface.hndl, client->con.hndl, hndl, uuid, &descr, &count);
+	if(ret != ESP_GATT_OK || count == 0){
+		ESP_LOGE(TAG, "Descriptor retrieve error %d, count %d", ret, count);
+		return 0;
+	}
+
+	return descr.handle;
+}
+
+void BLE::Client::CharInfo::readDescr(uint16_t descrHndl){
+	esp_ble_gattc_read_char_descr(client->iface.hndl, client->con.hndl, descrHndl, ESP_GATT_AUTH_REQ_NONE);
+}
+
 void BLE::Client::CharInfo::write(uint8_t* data, size_t len, bool needResponse){
 	esp_ble_gattc_write_char(client->iface.hndl, client->con.hndl, hndl, len, data, needResponse ? ESP_GATT_WRITE_TYPE_RSP : ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
 }

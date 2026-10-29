@@ -23,6 +23,15 @@ weather and world time.
   stalled behind it. Fixed, along with an event-ordering race in encryption setup, an endless
   connection-parameter retry loop, and slow reconnects (the watch advertised at the slowest
   rate Apple allows whenever the screen was off). It now reconnects in a few seconds.
+- **Notifications that don't silently stop.** The watch could look connected — on the iPhone
+  too — while the iPhone sent it nothing, for hours, until the link happened to drop. Service
+  discovery retries piled up while the iPhone was still busy, and the notification subscription
+  got lost in the queue; the iPhone changing its Bluetooth services mid-session had the same
+  effect. Both are fixed, and the watch now checks with the iPhone that it is still subscribed
+  (20 s after connecting, then every 10 minutes) and subscribes again if not. If it ever finds
+  the iPhone's notification service missing (its copy of the iPhone's services read while the
+  iPhone was changing them: "No phone" on the watch, "Connected" on the iPhone), it reads them
+  from the iPhone again instead of retrying from the stale copy forever.
 - **Sturdier low-power link.** Screen-off connection parameters (within Apple's rules) give
   the link ~3× more chances to recover from your body blocking the signal before it drops.
 - **Notifications survive disconnects** instead of being wiped, and when the iPhone re-sends
@@ -170,7 +179,9 @@ Use Python 3.12 or older for this IDF version.
 - `tools/watch.py` — talks to the watch's USB dev console: `watch.py cmd help`,
   `watch.py shot out.png` (screenshot), `watch.py cmd diag` (reset history, link stats),
   `watch.py cmd wx 18 C|Clear|20 C|10 C` (test a weather update), `watch.py cmd call`
-  (simulate an incoming call), `watch.py cmd notifs` (list notifications).
+  (simulate an incoming call), `watch.py cmd notifs` (list notifications), `watch.py cmd ancscheck`
+  (check the iPhone still has the watch subscribed; `ancsunsub` breaks it, to test the recovery;
+  `svcforget` makes the watch forget the iPhone's services, to test that it reads them again).
 - `tools/gen_icons.py` — menu icons for every theme, in each theme's palette.
 - `tools/gen_weather_icons.py` — weather icons and the degree-sign font.
 - `tools/gen_ringtone.py` — renders the ringtone from a MIDI file into chirp data.

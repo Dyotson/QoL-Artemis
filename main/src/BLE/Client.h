@@ -4,6 +4,7 @@
 #include "Util/Queue.h"
 #include "Util/PSRAMAllocator.h"
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <vector>
 #include <unordered_set>
@@ -36,6 +37,14 @@ public:
 	/** Whether the link may be dropped when discovery fails (e.g. not for Android phones) */
 	void setRecoveryAllowed(std::function<bool()> fn);
 
+	/**
+	 * Tears the services down and sets them up again on the same link: discovery, notify
+	 * registrations, subscriptions. For when the phone silently stopped delivering. BT task only.
+	 */
+	void rediscover();
+	/** Testing: forgets the phone's service list and sets up again, as if it had been read mid-change */
+	void debugForgetServices();
+
 	struct Status {
 		bool linked;		// GATT client connection exists
 		bool opened;
@@ -45,6 +54,9 @@ public:
 		uint8_t populated;		// ... whose characteristics were set up
 	};
 	Status getStatus();
+
+	/** Changes with every new link, so services can tell a setup on a fresh link from a re-setup */
+	uint32_t getLinkId() const { return linkId; }
 
 private:
 	static Client* self;
@@ -79,6 +91,7 @@ private:
 
 		operator bool(){ return hndl != 0xffff; }
 	} con;
+	std::atomic<uint32_t> linkId{0};
 
 	void ble_GATTC_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 
@@ -94,10 +107,32 @@ private:
 	// Watchdogs: if the link isn't encrypted, or no registered service got set up, shortly
 	// after connecting, ask again (a few times).
 	static constexpr uint64_t DiscoveryTimeoutUs = 5ULL * 1000 * 1000;	// first check / retry backoff base
+	static constexpr uint64_t RetryMaxUs = 60ULL * 1000 * 1000;
+	// Past this many retries something is persistently wrong: retry every few minutes instead,
+	// as every retry now re-reads the phone's whole service list over the air
+	static constexpr uint8_t QuickRetries = 10;
+	static constexpr uint64_t SlowRetryUs = 5ULL * 60 * 1000 * 1000;
+	static constexpr uint8_t LoggedRetries = 5;	// retries beyond these aren't put in the event log
 	static constexpr uint64_t FirstSearchDelayUs = 1200ULL * 1000;
 	static constexpr uint8_t MaxRetries = 3;	// encryption re-requests
 	bool searchPending = false;
+	// A search runs until ESP_GATTC_SEARCH_CMPL_EVT. Searches issued meanwhile queue up in the
+	// stack, and the subscription writes that follow got lost among them.
+	bool searchInFlight = false;
+	int64_t searchStartUs = 0;
+	uint8_t searchFound = 0;	// services (of any kind) the last search returned
+	// A search is answered from the stack's copy of the phone's service list, which is only
+	// read from the phone on connect and when it announces a change. If that read caught the
+	// iPhone mid-rebuild, the copy holds just the generic services and every search returns
+	// those, for as long as the link stays up. Re-read it over the air, then search.
+	bool refreshing = false;
+	void refreshServices();
+	static constexpr int64_t SearchStuckUs = 30LL * 1000 * 1000; // search again anyway after this long
 	esp_timer_handle_t discoveryTimer = nullptr;
+	// Fast link parameters (ConMan boost) for at most this long into discovery: retries can go on
+	// for as long as the link is up, and shouldn't keep the radio at the fast interval meanwhile
+	int64_t discoveryStartUs = 0;
+	static constexpr int64_t BoostMaxUs = 60LL * 1000 * 1000;
 
 	// iOS may encrypt the link before ESP_GATTC_CONNECT_EVT arrives. Remember that the
 	// current link already authenticated so onConnect() doesn't forget it.
@@ -107,7 +142,7 @@ private:
 	esp_timer_handle_t encryptTimer = nullptr;
 	uint8_t encryptRetries = 0;
 	void onEncryptTimeout();
-	uint8_t discoveryRetries = 0;
+	uint16_t discoveryRetries = 0;
 	void onDiscoveryTimeout();
 	std::function<bool()> recoveryAllowed;
 	void searchServices();
@@ -118,6 +153,7 @@ private:
 	void onDisconnect(const esp_ble_gattc_cb_param_t::gattc_disconnect_evt_param* param);
 
 	void passToChar(esp_gattc_cb_event_t event, esp_ble_gattc_cb_param_t *param);
+	void closeServices();
 	void close();
 
 };

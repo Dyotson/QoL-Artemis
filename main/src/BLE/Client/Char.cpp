@@ -73,6 +73,7 @@ void BLE::Client::Char::close(){
 	chr.reset();
 	remoteProps = 0;
 	configsDone.clear();
+	descrReadHndl = 0;
 
 	while(notifQueue.get(0) != nullptr){}
 }
@@ -129,6 +130,26 @@ bool BLE::Client::Char::write(const std::vector<uint8_t>& data){
 
 	chr->write((uint8_t*) data.data(), data.size(), true);
 	return true;
+}
+
+bool BLE::Client::Char::readDescr(uint16_t uuid, DescrReadCB cb){
+	if(!connected()) return false;
+
+	const uint16_t hndl = chr->getDescrHandle({ .len = 2, .uuid = { .uuid16 = uuid } });
+	if(hndl == 0) return false;
+
+	descrReadCB = std::move(cb);
+	descrReadHndl = hndl;
+	chr->readDescr(hndl);
+	return true;
+}
+
+void BLE::Client::Char::onDescrRead(const esp_ble_gattc_cb_param_t::gattc_read_char_evt_param* param){
+	// The callback may tear the services down (and close this char), so take it out first
+	descrReadHndl = 0;
+	auto cb = std::move(descrReadCB);
+	descrReadCB = nullptr;
+	if(cb) cb(param->status, param->value, param->value_len);
 }
 
 void BLE::Client::Char::read(){

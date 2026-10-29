@@ -105,12 +105,50 @@ void BLE::Client::ble_GATTC_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_i
 	}else if(event == ESP_GATTC_DISCONNECT_EVT){
 		ESP_LOGI(TAG, "ESP_GATTC_DISCONNECT_EVT");
 		onDisconnect(&param->disconnect);
+	}else if(event == ESP_GATTC_WRITE_DESCR_EVT){
+		// Descriptor writes are the subscriptions (CCCD); if the phone rejects one, it never
+		// sends that characteristic's notifications
+		if(param->write.status != ESP_GATT_OK){
+			ESP_LOGE(TAG, "descriptor write failed, handle 0x%x, status 0x%x", param->write.handle, param->write.status);
+			if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+				diag->log(Diagnostics::Ev::RegFail, param->write.status);
+			}
+		}else{
+			ESP_LOGI(TAG, "descriptor 0x%x written", param->write.handle);
+		}
+	}else if(event == ESP_GATTC_DIS_SRVC_CMPL_EVT){
+		// The stack finished reading the phone's service list. Only acted on after our own
+		// refresh: the stack also reads it on connect, and searches already wait for that.
+		if(refreshing && param->dis_srvc_cmpl.conn_id == con.hndl){
+			refreshing = false;
+			if(param->dis_srvc_cmpl.status != ESP_GATT_OK){
+				ESP_LOGE(TAG, "reading the phone's services failed, status 0x%x", param->dis_srvc_cmpl.status);
+				searchInFlight = false;
+				if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+					diag->log(Diagnostics::Ev::SearchFail, param->dis_srvc_cmpl.status);
+				}
+			}else{
+				searchServices();
+			}
+		}
+	}else if(event == ESP_GATTC_SRVC_CHG_EVT){
+		// The phone changed its GATT database (iOS does this mid-session, e.g. when an app
+		// adds or removes a Bluetooth service). The stack has already dropped our notify
+		// registrations in the changed range and is rediscovering, and the phone may have
+		// reset our subscriptions: notifications would silently stop on a link that stays
+		// up for days. Set everything up again.
+		ESP_LOGW(TAG, "ESP_GATTC_SRVC_CHG_EVT");
+		if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+			diag->log(Diagnostics::Ev::SvcChanged);
+		}
+		rediscover();
 	}else{
 		switch(event){
 			case ESP_GATTC_REG_FOR_NOTIFY_EVT:
 			case ESP_GATTC_NOTIFY_EVT:
 			case ESP_GATTC_WRITE_CHAR_EVT:
 			case ESP_GATTC_READ_CHAR_EVT:
+			case ESP_GATTC_READ_DESCR_EVT:
 				passToChar(event, param);
 				break;
 			default:
@@ -122,6 +160,7 @@ void BLE::Client::ble_GATTC_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_i
 
 void BLE::Client::onConnect(const esp_ble_gattc_cb_param_t::gattc_connect_evt_param* param){
 	memcpy(con.addr, param->remote_bda, 6);
+	linkId++;
 
 	// Capture the conn_id now so onPairDone() has a valid handle even if the
 	// AUTH_CMPL event arrives before ESP_GATTC_OPEN_EVT (see maybeStartDiscovery).
@@ -207,8 +246,10 @@ void BLE::Client::onDiscoveryTimeout(){
 	// Done only when every registered service is set up: with just the clock service up
 	// and not the notification service, the watch would sit there without notifications.
 	bool complete = true;
+	bool missing = false;	// not even in the phone's service list
 	for(const auto& svc : services){
 		if(!svc->populated()) complete = false;
+		if(!svc->established()) missing = true;
 	}
 	if(complete){
 		// Setup traffic is over, back to normal link parameters
@@ -222,16 +263,45 @@ void BLE::Client::onDiscoveryTimeout(){
 		return;
 	}
 
-	// Keep trying for as long as the link is up, backing off (5 s, 10 s, 20 s, ... 60 s).
-	// Not dropping the link on purpose: iOS backs off from reconnecting to an accessory that
-	// keeps closing the connection, which is worse than retrying.
-	if(discoveryRetries < 0xff) discoveryRetries++;
-	ESP_LOGW(TAG, "Services not all set up, searching again (%d)", discoveryRetries);
-	if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
-		diag->log(Diagnostics::Ev::DiscRetry, discoveryRetries);
+	// Still not all set up after a minute (e.g. a service the phone doesn't offer): keep
+	// retrying, but at the normal low-power link interval
+	if(esp_timer_get_time() - discoveryStartUs > BoostMaxUs){
+		ConMan.setBoost(false);
 	}
-	searchServices();
-	const uint64_t backoff = std::min<uint64_t>(DiscoveryTimeoutUs << std::min<int>(discoveryRetries - 1, 4), 60ULL * 1000 * 1000);
+
+	// The last search hasn't finished: the stack is still discovering the phone, which takes
+	// ~10 s when the iPhone is busy discovering us at the same time. Searching again now would
+	// queue behind it, and the subscription writes that follow got lost among the queued
+	// searches - "notifications ready" while the iPhone was never asked to send any. Wait.
+	if(searchInFlight && esp_timer_get_time() - searchStartUs < SearchStuckUs){
+		ESP_LOGI(TAG, "Search still running, waiting");
+		esp_timer_start_once(discoveryTimer, DiscoveryTimeoutUs);
+		return;
+	}
+
+	// Keep trying for as long as the link is up, backing off (5 s, 10 s, 20 s, ... 60 s, then
+	// every 5 minutes). Not dropping the link on purpose: iOS backs off from reconnecting to an
+	// accessory that keeps closing the connection, which is worse than retrying.
+	if(discoveryRetries < 0xffff) discoveryRetries++;
+	// The event log only holds so many entries: a retry logged every minute for hours had
+	// pushed out everything that led up to it
+	const bool logged = discoveryRetries <= LoggedRetries;
+	auto diag = (Diagnostics*) Services.get(::Service::Diag);
+	if(discoveryRetries == 1 || !missing){
+		// The first search may have just been early; or everything was found, and only a
+		// characteristic didn't get set up
+		ESP_LOGW(TAG, "Services not all set up, searching again");
+		if(diag && logged) diag->log(Diagnostics::Ev::DiscRetry, discoveryRetries);
+		searchServices();
+	}else{
+		// It was answered and still came up short: the stack's copy of the phone's services is
+		// stale (or the phone really doesn't have one of them, which re-reading also settles)
+		ESP_LOGW(TAG, "Services not all set up (%d in the list), re-reading them from the phone (%d)", searchFound, discoveryRetries);
+		if(diag && logged) diag->log(Diagnostics::Ev::SvcRefresh, searchFound);
+		refreshServices();
+	}
+	const uint64_t backoff = discoveryRetries > QuickRetries ? SlowRetryUs :
+			std::min<uint64_t>(DiscoveryTimeoutUs << std::min<int>(discoveryRetries - 1, 4), RetryMaxUs);
 	esp_timer_start_once(discoveryTimer, backoff);
 }
 
@@ -243,6 +313,7 @@ void BLE::Client::maybeStartDiscovery(){
 	// finishes last triggers discovery. `discovering` ensures it starts once.
 	if(!con.opened || !con.paired || con.discovering) return;
 	con.discovering = true;
+	discoveryStartUs = esp_timer_get_time();
 
 	discoveryRetries = 0;
 
@@ -281,10 +352,35 @@ void BLE::Client::searchServices(){
 	// One "discover all primary services" request; onSearchResult matches the results to
 	// our registered services. Issuing one filtered search per service back to back got
 	// all but the first rejected, since the stack runs a single discovery at a time.
+	searchInFlight = true;
+	searchStartUs = esp_timer_get_time();
+	searchFound = 0;
 	esp_ble_gattc_search_service(iface.hndl, con.hndl, nullptr);
 }
 
+void BLE::Client::refreshServices(){
+	// Drops the stack's copy of the phone's service list and reads it again over the air;
+	// ESP_GATTC_DIS_SRVC_CMPL_EVT then starts the search. Services already set up keep running:
+	// their handles are still valid unless the phone announced a change, which sets everything
+	// up again anyway (ESP_GATTC_SRVC_CHG_EVT). If the stack is reading the list already, its
+	// completion is reported the same way.
+	searchInFlight = true;
+	searchStartUs = esp_timer_get_time();
+	refreshing = true;
+	if(esp_ble_gattc_cache_refresh(con.addr) != ESP_OK){
+		refreshing = false;
+		searchServices();
+	}
+}
+
 void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_res_evt_param* param){
+	if(searchFound < 0xff) searchFound++;
+	if(param->srvc_id.uuid.len == ESP_UUID_LEN_16){
+		ESP_LOGI(TAG, "Phone service 0x%04x, handles 0x%x-0x%x", param->srvc_id.uuid.uuid.uuid16, param->start_handle, param->end_handle);
+	}else{
+		ESP_LOGI(TAG, "Phone service (%d-byte UUID), handles 0x%x-0x%x", param->srvc_id.uuid.len, param->start_handle, param->end_handle);
+	}
+
 	for(const auto& service : services){
 		if(service->populated()) continue; // already set up by an earlier search (retries search everything)
 		if(param->srvc_id.uuid.len == service->uuid.len && memcmp(param->srvc_id.uuid.uuid.uuid128, service->uuid.uuid.uuid128, service->uuid.len) == 0){
@@ -294,6 +390,8 @@ void BLE::Client::onSearchResult(const esp_ble_gattc_cb_param_t::gattc_search_re
 }
 
 void BLE::Client::onSearchComplete(const esp_ble_gattc_cb_param_t::gattc_search_cmpl_evt_param* param){
+	searchInFlight = false;
+
 	if(param->status != ESP_GATT_OK){
 		ESP_LOGE(TAG, "search service failed, error status = %x", param->status);
 		if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
@@ -364,12 +462,48 @@ void BLE::Client::passToChar(esp_gattc_cb_event_t event, esp_ble_gattc_cb_param_
 
 		chr->second->onWriteResp(event, &param->write);
 
+	}else if(event == ESP_GATTC_READ_DESCR_EVT){
+		ESP_LOGI(TAG, "ESP_GATTC_READ_DESCR_EVT");
+
+		// Find the owner by the descriptor handle it asked for; call it outside the loop,
+		// since the callback may rediscover and clear the map
+		Char* owner = nullptr;
+		for(const auto& pair : chars){
+			if(pair.second->descrReadHndl == param->read.handle){
+				owner = pair.second;
+				break;
+			}
+		}
+		if(owner == nullptr){
+			ESP_LOGW(TAG, "Descriptor read for unknown handle 0x%x", param->read.handle);
+			return;
+		}
+
+		owner->onDescrRead(&param->read);
 	}else{
 		ESP_LOGW(TAG, "Unhandled characteristic event: 0x%x", event);
 	}
 }
 
-void BLE::Client::close(){
+void BLE::Client::rediscover(){
+	if(!con || !con.opened || !con.paired) return; // not set up yet: the normal setup will do it
+
+	ESP_LOGW(TAG, "Setting the services up again");
+	closeServices();
+
+	con.discovering = false;
+	refreshing = false;
+	ConMan.setBoost(true);
+	maybeStartDiscovery();
+}
+
+void BLE::Client::debugForgetServices(){
+	if(!con) return;
+	esp_ble_gattc_cache_clean(con.addr);
+	rediscover();
+}
+
+void BLE::Client::closeServices(){
 	for(auto& svc : services){
 		if(svc == nullptr) {
 			continue;
@@ -378,6 +512,10 @@ void BLE::Client::close(){
 		svc->close();
 	}
 	chars.clear();
+}
+
+void BLE::Client::close(){
+	closeServices();
 
 	// Reset to the "no connection" sentinel that ConnectionInfo::operator bool
 	// checks (0xffff), not 0 — otherwise a closed connection still reads as valid.
@@ -390,6 +528,8 @@ void BLE::Client::close(){
 	con.paired = false;
 	con.discovering = false;
 	searchPending = false;
+	searchInFlight = false;
+	refreshing = false;
 	memset(con.addr, 0, 6);
 
 	// Server notifies ConMan, which in turn starts advertising

@@ -15,6 +15,11 @@ public:
 
 	void writeDescr(esp_bt_uuid_t uuid, uint8_t* data, size_t len);
 
+	/** Handle of one of this characteristic's descriptors, 0 if not found */
+	uint16_t getDescrHandle(esp_bt_uuid_t uuid) const;
+
+	void readDescr(uint16_t descrHndl);
+
 	void write(uint8_t* data, size_t len, bool needResponse);
 
 	void read();

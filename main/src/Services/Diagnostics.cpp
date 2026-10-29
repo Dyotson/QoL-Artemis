@@ -245,6 +245,9 @@ const char* Diagnostics::evName(Ev type){
 		case Ev::Wake: return "screen on";
 		case Ev::SearchFail: return "discovery failed";
 		case Ev::AuthFail: return "PAIRING/ENCRYPTION FAILED";
+		case Ev::SvcChanged: return "phone services changed, resubscribing";
+		case Ev::NotifStall: return "NOTIFICATIONS STALLED, resubscribing";
+		case Ev::SvcRefresh: return "re-reading the phone's services";
 		default: return "?";
 	}
 }

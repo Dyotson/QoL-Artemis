@@ -73,12 +73,20 @@ public:
 
 	const CurrentTime& getCurrentTime() const { return cTime; }
 
+	/** Checks now that the iPhone still has the watch subscribed to notifications (normally every 10 min) */
+	void checkNotifs(){ ancs.probe(); }
+	/** Testing: makes the iPhone stop sending notifications, as if it had dropped the subscription */
+	void debugUnsubscribe(){ ancs.debugUnsubscribe(); }
+	/** Testing: the watch forgets the iPhone's service list, as if it had been read while the iPhone was changing it */
+	void debugForgetServices(){ client->debugForgetServices(); }
+
 	/** Adds a fake notification, for testing the UI from the dev console. */
 	void debugInject(const std::string& title, const std::string& message, const std::string& appID = "Messages");
 	void debugCall(const std::string& caller);
 	void debugEndCall();
 
 private:
+	BLE::Client* client;
 	ANCS::Client ancs;
 	AMS::Client ams;
 	CurrentTime cTime;

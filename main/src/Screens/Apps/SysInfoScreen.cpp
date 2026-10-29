@@ -111,6 +111,12 @@ void SysInfoScreen::refresh(){
 				snprintf(e, sizeof(e), "%s, %s", Diagnostics::evName(type), Diagnostics::bleReasonText(arg));
 			}else if(type == Diagnostics::Ev::AuthFail){
 				snprintf(e, sizeof(e), "pairing failed 0x%02x", arg);
+			}else if(type == Diagnostics::Ev::NotifStall){
+				snprintf(e, sizeof(e), "notifs stalled %02x/%02x, fixed", arg >> 8, arg & 0xff);
+			}else if(type == Diagnostics::Ev::SvcChanged){
+				snprintf(e, sizeof(e), "phone services changed");
+			}else if(type == Diagnostics::Ev::SvcRefresh){
+				snprintf(e, sizeof(e), "phone services re-read");
 			}else if(type == Diagnostics::Ev::LinkUp && arg == 0){
 				snprintf(e, sizeof(e), "link up, NOT PAIRED");
 			}else if(type == Diagnostics::Ev::Boot){

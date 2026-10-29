@@ -14,6 +14,7 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <esp_timer.h>
 
 namespace ANCS {
 
@@ -25,7 +26,14 @@ public:
 	void actionPos(uint32_t uid) override;
 	void actionNeg(uint32_t uid) override;
 
+	/** Checks the iPhone still has us subscribed; sets the link up again if not. Runs every ProbeIntervalUs. */
+	void probe();
+
+	/** Testing: turns our subscriptions off on the iPhone, as if it had dropped them */
+	void debugUnsubscribe();
+
 private:
+	BLE::Client* ble;
 	std::shared_ptr<BLE::Client::Service> service;
 	struct {
 		std::shared_ptr<BLE::Client::Char> notif;
@@ -37,6 +45,24 @@ private:
 
 	void onConn();
 	void onDiscon();
+
+	// The link can stay up for days while the iPhone has stopped sending us notifications
+	// (subscription reset on its side, or a service change). Nothing else would notice, so
+	// periodically read our subscriptions back. One small read; the link is active anyway.
+	// The first check comes soon after connecting: setup can end without the subscription on.
+	static constexpr uint64_t FirstProbeUs = 20ULL * 1000 * 1000;
+	static constexpr uint64_t ProbeIntervalUs = 10ULL * 60 * 1000 * 1000;
+	// After this many failed checks in a row it isn't something we can fix from here (e.g.
+	// notification sharing turned off on the iPhone): check hourly, each one costs a full setup.
+	static constexpr uint8_t MaxQuickStalls = 3;
+	static constexpr uint64_t StalledProbeUs = 60ULL * 60 * 1000 * 1000;
+	uint64_t firstProbeDelayUs() const;
+	esp_timer_handle_t probeTimer = nullptr;
+	// Checks failed in a row (BT task). Each one sets everything up again, so back off in case
+	// it can't be fixed from here (e.g. notification sharing turned off on the iPhone).
+	uint8_t stalls = 0;
+	uint32_t subscribedLink = 0;	// BLE::Client::getLinkId() of the last subscription
+	bool probeOk(esp_gatt_status_t status, const uint8_t* value, uint16_t len);
 
 	ThreadedClosure notifThread;
 	ThreadedClosure dataThread;

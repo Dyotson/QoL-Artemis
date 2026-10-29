@@ -228,6 +228,8 @@ void DevConsole::registerBuiltins(){
 			else if(type == Diagnostics::Ev::LinkDown) snprintf(extra, sizeof(extra), " (0x%02x %s)", arg, Diagnostics::bleReasonText(arg));
 			else if(type == Diagnostics::Ev::LinkUp) snprintf(extra, sizeof(extra), " (pairings stored: %u)", arg);
 			else if(type == Diagnostics::Ev::AuthFail) snprintf(extra, sizeof(extra), " (reason 0x%02x)", arg);
+			else if(type == Diagnostics::Ev::SvcRefresh) snprintf(extra, sizeof(extra), " (%u in the stale list)", arg);
+			else if(type == Diagnostics::Ev::NotifStall) snprintf(extra, sizeof(extra), " (status 0x%02x, CCCD 0x%02x)", arg >> 8, arg & 0xff);
 			else if(type == Diagnostics::Ev::NotifRx || type == Diagnostics::Ev::WeatherRx) snprintf(extra, sizeof(extra), " x%u", arg);
 			else if(arg) snprintf(extra, sizeof(extra), " (%u)", arg);
 			printf("%02d-%02d %02d:%02d  %s%s\n", lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, Diagnostics::evName(type), extra);
@@ -318,6 +320,21 @@ void DevConsole::registerBuiltins(){
 		auto phone = (Phone*) Services.get(Service::Phone);
 		if(phone && args.size() > 1) phone->clearDryRun = args[1] == "on";
 		if(phone) printf("clear-all dry run: %s\n", phone->clearDryRun ? "on (iPhone untouched)" : "off");
+	});
+
+	addCommand("ancscheck", "check now that the iPhone still sends notifications (result in the log / events)", [](const Args&){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(phone) phone->checkNotifs();
+	});
+
+	addCommand("ancsunsub", "unsubscribe from the iPhone's notifications, to test that ancscheck recovers", [](const Args&){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(phone) phone->debugUnsubscribe();
+	});
+
+	addCommand("svcforget", "forget the iPhone's service list (as if read mid-change), to test that the watch re-reads it", [](const Args&){
+		auto phone = (Phone*) Services.get(Service::Phone);
+		if(phone) phone->debugForgetServices();
 	});
 
 	addCommand("notifs", "list notifications on the watch (app, title, message)", [](const Args&){

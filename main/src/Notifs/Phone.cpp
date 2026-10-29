@@ -9,7 +9,7 @@
 
 static const char* TAG = "Phone";
 
-Phone::Phone(BLE::Server* server, BLE::Client* client) : ancs(client), ams(client), cTime(client), android(server){
+Phone::Phone(BLE::Server* server, BLE::Client* client) : client(client), ancs(client), ams(client), cTime(client), android(server){
 	auto reg = [this](NotifSource* src){
 		src->setOnConnect([this, src](){ onConnect(src); });
 		src->setOnDisconnect([this, src](){ onDisconnect(src); });

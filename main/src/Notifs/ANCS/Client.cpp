@@ -1,12 +1,14 @@
 #include "Client.h"
 #include "Util/stdafx.h"
 #include "Util/TextSanitize.h"
+#include "Util/Services.h"
+#include "Services/Diagnostics.h"
 #include <cstring>
 #include <esp_log.h>
 
 static const char* TAG = "ANCS";
 
-ANCS::Client::Client(BLE::Client* client) : notifThread([this](){ loopNotif(); }, "ANCS::Notif", 3 * 1024), dataThread([this](){ loopData(); }, "ANCS::Data", 6 * 1024){
+ANCS::Client::Client(BLE::Client* client) : ble(client), notifThread([this](){ loopNotif(); }, "ANCS::Notif", 3 * 1024), dataThread([this](){ loopData(); }, "ANCS::Data", 6 * 1024){
 	service = client->addService(ServiceUUID);
 	chr.notif = service->addChar(Char_NotifSource_UUID, ESP_GATT_CHAR_PROP_BIT_NOTIFY);
 	chr.ctrl = service->addChar(Char_ControlPoint_UUID, ESP_GATT_CHAR_PROP_BIT_WRITE);
@@ -15,24 +17,65 @@ ANCS::Client::Client(BLE::Client* client) : notifThread([this](){ loopNotif(); }
 	service->setOnConnectCb([this](){ onConn(); });
 	service->setOnDisconnectCb([this](){ onDiscon(); });
 
-	chr.notif->setOnConnectedCb([this](){ chr.notif->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x01, 0x00 }); });
-	chr.data->setOnConnectedCb([this](){ chr.data->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x01, 0x00 }); });
+	// Subscribe once both are registered, Data Source first: as soon as Notification Source is on,
+	// the iPhone announces every notification it has, and our requests for their contents are
+	// answered on Data Source. The other way around, the first one got no reply and was dropped.
+	//
+	// Set up again on the same link (phone services changed, a failed check, a stale service list),
+	// the iPhone may still have us subscribed and then announces nothing: the watch had dropped its
+	// notifications meanwhile, and the ones it had came back as "gone from the phone". Turning
+	// Notification Source off first makes the iPhone announce them all again.
+	auto subscribe = [this](){
+		if(!chr.notif->connected() || !chr.data->connected()) return;
+		const uint32_t link = ble->getLinkId();
+		if(link == subscribedLink){
+			chr.notif->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x00, 0x00 });
+		}
+		subscribedLink = link;
+		chr.data->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x01, 0x00 });
+		chr.notif->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x01, 0x00 });
+	};
+	chr.notif->setOnConnectedCb(subscribe);
+	chr.data->setOnConnectedCb(subscribe);
+
+	const esp_timer_create_args_t args = {
+			.callback = [](void* arg){
+				auto self = static_cast<Client*>(arg);
+				self->probe();
+				if(self->connected) esp_timer_start_once(self->probeTimer, self->stalls >= MaxQuickStalls ? StalledProbeUs : ProbeIntervalUs);
+			},
+			.arg = this,
+			.dispatch_method = ESP_TIMER_TASK,
+			.name = "ANCSProbe",
+			.skip_unhandled_events = true
+	};
+	esp_timer_create(&args, &probeTimer);
 
 	notifThread.start();
 	dataThread.start();
 }
 
 ANCS::Client::~Client(){
+	if(probeTimer){
+		esp_timer_stop(probeTimer);
+		esp_timer_delete(probeTimer);
+	}
 	notifThread.stop();
 	dataThread.stop();
 }
 
 void ANCS::Client::onConn(){
 	connected = true;
+	if(probeTimer){
+		esp_timer_stop(probeTimer);
+		esp_timer_start_once(probeTimer, firstProbeDelayUs());
+	}
 	connect();
 }
 
 void ANCS::Client::onDiscon(){
+	if(probeTimer) esp_timer_stop(probeTimer);
+
 	{
 		std::lock_guard lock(mut);
 		needData.clear();
@@ -45,6 +88,52 @@ void ANCS::Client::onDiscon(){
 
 	connected = false;
 	disconnect();
+}
+
+void ANCS::Client::probe(){
+	if(!connected) return;
+
+	// Both have to be on: Notification Source announces notifications, Data Source carries their text
+	const bool issued = chr.notif->readDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, [this](esp_gatt_status_t status, const uint8_t* value, uint16_t len){
+		if(!probeOk(status, value, len)) return;
+		chr.data->readDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, [this](esp_gatt_status_t status, const uint8_t* value, uint16_t len){
+			probeOk(status, value, len);
+		});
+	});
+	if(!issued){
+		ESP_LOGW(TAG, "Couldn't check the subscription");
+	}
+}
+
+uint64_t ANCS::Client::firstProbeDelayUs() const{
+	// Soon after (re)connecting; backing off while it keeps failing: 20 s, 40 s, 80 s, then hourly
+	if(stalls >= MaxQuickStalls) return StalledProbeUs;
+	return FirstProbeUs << stalls;
+}
+
+void ANCS::Client::debugUnsubscribe(){
+	chr.notif->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x00, 0x00 });
+	chr.data->writeDescr(ESP_GATT_UUID_CHAR_CLIENT_CONFIG, { 0x00, 0x00 });
+}
+
+bool ANCS::Client::probeOk(esp_gatt_status_t status, const uint8_t* value, uint16_t len){
+	// Runs on the BT task (descriptor read result)
+	if(status == ESP_GATT_OK && len >= 1 && (value[0] & 0x01)){
+		ESP_LOGI(TAG, "Subscription OK");
+		stalls = 0;
+		return true;
+	}
+
+	const uint8_t cccd = (status == ESP_GATT_OK && len >= 1) ? value[0] : 0xff;
+	ESP_LOGW(TAG, "iPhone isn't sending us notifications (status 0x%x, CCCD 0x%02x), setting up again (%d)", status, cccd, stalls + 1);
+	if(stalls < MaxQuickStalls){ // a run of these says the same thing; keep the event log for the rest
+		if(auto diag = (Diagnostics*) Services.get(::Service::Diag)){
+			diag->log(Diagnostics::Ev::NotifStall, ((uint16_t) status << 8) | cccd);
+		}
+	}
+	if(stalls < 0xff) stalls++;
+	ble->rediscover();
+	return false;
 }
 
 void ANCS::Client::actionPos(uint32_t uid){
